@@ -305,6 +305,16 @@ label.chk{display:flex; gap:8px; align-items:center; cursor:pointer; font-size:1
 }
 .frac > .num{padding:0 .34em .06em; border-bottom:1.6px solid currentColor}
 .frac > .den{padding:.08em .34em 0}
+/* ── 근호 ── 안의 내용(분수 등) 높이에 맞춰 갈고리가 늘어난다 */
+.sqrt{display:inline-flex; align-items:stretch; vertical-align:middle; margin:0 .08em}
+.sqrt > .rad{width:.55em; align-self:stretch; height:auto; flex:none; overflow:visible}
+/* 안쪽은 일반 흐름을 유지해야 위·아래 첨자가 제자리에 놓인다 */
+.sqrt > .radicand{
+  border-top:1.4px solid currentColor;
+  padding:.14em .22em 0 .12em; display:inline-block;
+}
+.sqrt > .idx{font-size:.6em; align-self:flex-start; margin-right:-.18em; position:relative; top:.1em}
+.md p:has(.sqrt), .md li:has(.sqrt){line-height:2.35}
 /* 분수가 들어간 줄은 줄간격을 넉넉히 — 윗줄·아랫줄과 겹치지 않게 */
 .fx{
   font-family:"Cambria Math","Times New Roman",Georgia,serif;

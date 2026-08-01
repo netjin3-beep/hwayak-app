@@ -55,6 +55,19 @@
     return [str.slice(1, i), str.slice(i + 1)];
   }
 
+  /**
+   * 근호. 안의 내용이 분수처럼 높아도 갈고리가 함께 늘어나도록 SVG로 그린다.
+   *   index: '' 이면 제곱근, '3' 이면 세제곱근
+   */
+  function radical(inner, index) {
+    return '<span class="sqrt">' +
+      (index ? '<span class="idx">' + index + '</span>' : '') +
+      '<svg class="rad" viewBox="0 0 12 28" preserveAspectRatio="none" aria-hidden="true">' +
+      '<path d="M0.6 17 L4 17 L7 26.4 L11.6 1.6" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.4" vector-effect="non-scaling-stroke" stroke-linejoin="miter" stroke-linecap="square"/>' +
+      '</svg><span class="radicand">' + inner + '</span></span>';
+  }
+
   function tex(src) {
     var out = '', s = String(src);
     while (s.length) {
@@ -66,15 +79,22 @@
                '</span><span class="den">' + tex(den) + '</span></span>';
         continue;
       }
+      // 근호는 안의 내용 높이에 맞춰 늘어나야 한다(분수를 품으면 글자 √ 로는 겹친다).
+      // 그래서 √ 모양을 SVG로 그려 세로로 늘린다.
       if (s.slice(0, 5) === '\\sqrt') {
-        s = s.slice(5); var r = arg(s); s = r[1];
-        out += '√<span style="border-top:1.4px solid currentColor;padding:0 .15em">' + tex(r[0]) + '</span>';
+        s = s.slice(5);
+        var idx = '';
+        if (s[0] === '[') {                       // \sqrt[3]{x} — n제곱근
+          var close = s.indexOf(']');
+          if (close > 0) { idx = tex(s.slice(1, close)); s = s.slice(close + 1); }
+        }
+        var r = arg(s); s = r[1];
+        out += radical(tex(r[0]), idx);
         continue;
       }
       if (s.slice(0, 5) === '\\cbrt') {
         s = s.slice(5); var r3 = arg(s); s = r3[1];
-        out += '<sup style="font-size:.62em">3</sup>√<span style="border-top:1.4px solid currentColor;padding:0 .15em">' +
-               tex(r3[0]) + '</span>';
+        out += radical(tex(r3[0]), '3');
         continue;
       }
       if (s.slice(0, 5) === '\\text' || s.slice(0, 7) === '\\mathrm' || s.slice(0, 4) === '\\bar') {
