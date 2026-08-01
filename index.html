@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="utf-8">
+<!-- viewport-fit=cover: 아이폰 노치 영역까지 배경을 채우고, 안전영역은 CSS에서 확보 -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- 홈 화면에 추가하면 주소창 없이 앱처럼 실행된다 -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="화약류관리기사">
+<meta name="format-detection" content="telephone=no">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%23e2650d'/%3E%3Ctext x='50' y='68' font-size='58' text-anchor='middle'%3E%F0%9F%92%A5%3C/text%3E%3C/svg%3E">
+<title>화약류관리기사 학습앱</title>
+<link rel="stylesheet" href="css/style.css?v=b40ec38eba">
+<script>
+/* 깜빡임 방지: CSS 적용 전에 저장된 테마를 먼저 반영 */
+try{
+  var _s = JSON.parse(localStorage.getItem('hwayak_v1')||'{}');
+  var _t = (_s.settings && _s.settings.theme) || 'light';
+  document.documentElement.setAttribute('data-theme', _t);
+}catch(e){}
+</script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">💥</span>
+    <div>
+      <h1>화약류관리기사</h1>
+      <p class="sub">필기 통합 학습 · <span id="dday"></span></p>
+    </div>
+  </div>
+  <nav class="nav" id="nav">
+    <a href="#/home">홈</a>
+    <a href="#/theory">이론정리</a>
+    <a href="#/exams">기출문제</a>
+    <a href="#/predict">예상문제</a>
+    <a href="#/mock">모의고사</a>
+    <a href="#/wrong">오답노트</a>
+    <a href="#/stats">통계</a>
+    <button id="themeBtn" title="흰색/블랙 모드 전환">🌙</button>
+  </nav>
+</header>
+
+<main id="view"></main>
+
+<div id="toast" class="toast"></div>
+
+<!-- 데이터 파일은 로컬(file://·localhost)에서만 이렇게 직접 불러온다.
+     인터넷 주소로 열렸을 때는 아래 스크립트가 로드를 건너뛰고,
+     로그인 후 비공개 버킷에서 JSON으로 받아온다(cloud.js). -->
+<script>
+window.__LOCAL_MODE = (function () {
+  var h = location.hostname;
+  return location.protocol === 'file:' ||
+         h === 'localhost' || h === '127.0.0.1' || h === '' ||
+         /^192\.168\./.test(h) || /^10\./.test(h) ||
+         /^172\.(1[6-9]|2\d|3[01])\./.test(h);
+})();
+if (window.__LOCAL_MODE) {
+  var v = '?v=b40ec38eba';
+  ['exams', 'images', 'answers', 'keywords', 'theory', 'predicted'].forEach(function (n) {
+    document.write('<script src="data/' + n + '.js' + v + '"><\/script>');
+  });
+}
+</script>
+<script src="supabase-config.js?v=b40ec38eba"></script>
+<script src="js/cloud.js?v=b40ec38eba"></script>
+<script src="js/store.js?v=b40ec38eba"></script>
+<script src="js/md.js?v=b40ec38eba"></script>
+<script src="js/quiz.js?v=b40ec38eba"></script>
+<script src="js/app.js?v=b40ec38eba"></script>
+</body>
+</html>
