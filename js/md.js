@@ -28,7 +28,11 @@
     '\\rightarrow': '→', '\\leftarrow': '←', '\\leftrightarrow': '↔',
     '\\geq': '≥', '\\leq': '≤', '\\neq': '≠', '\\sim': '∼',
     '\\gg': '≫', '\\ll': '≪', '\\perp': '⊥', '\\angle': '∠',
-    '\\partial': '∂', '\\int': '∫', '\\prime': '′'
+    '\\partial': '∂', '\\int': '∫', '\\prime': '′',
+    // 대문자 그리스·단위 기호 (Ω·Φ 등이 명령 이름 그대로 보이던 문제 보완)
+    '\\Omega': 'Ω', '\\Phi': 'Φ', '\\Psi': 'Ψ', '\\Sigma': 'Σ',
+    '\\Pi': 'Π', '\\Lambda': 'Λ', '\\Gamma': 'Γ', '\\Theta': 'Θ',
+    '\\varPhi': 'Φ', '\\varOmega': 'Ω', '\\degree': '°', '\\circ': '∘'
   };
 
   /** 삼각·로그 등 함수명은 정체(로만체)로 세워 표시한다 */
@@ -37,6 +41,11 @@
 
   /** 중괄호 균형을 맞춰 인수 하나를 떼어냄 → [내용, 남은문자열] */
   function arg(str) {
+    // 중괄호 없이 명령을 인수로 쓴 경우도 통째로 받는다 (예: \sigma_\theta, x^\circ)
+    if (str[0] === '\\') {
+      var cmd = /^\\[A-Za-z]+/.exec(str);
+      if (cmd) return [cmd[0], str.slice(cmd[0].length)];
+    }
     if (str[0] !== '{') return [str[0] || '', str.slice(1)];
     var d = 0, i = 0;
     for (; i < str.length; i++) {
