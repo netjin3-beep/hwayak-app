@@ -278,12 +278,18 @@
   /** 회차·세트별 성취도 — solved 기록만으로 집계하므로 제출하지 않아도 잡힌다 */
   function perExamStats() {
     var st = Store.s, rows = [];
+    function add(bys, subj, ok) {
+      var s = subj || '기타';
+      bys[s] = bys[s] || { ok: 0, n: 0 };
+      bys[s].n++; if (ok) bys[s].ok++;
+    }
     EXAMS.forEach(function (e) {
-      var n = 0, ok = 0, last = 0;
+      var n = 0, ok = 0, last = 0, bys = {};
       e.questions.forEach(function (q) {
         var r = st.solved[e.id + '#' + q.no];
         if (!r) return;
         n++; if (r.ok) ok++;
+        add(bys, q.subject, r.ok);
         if ((r.at || 0) > last) last = r.at;
       });
       if (!n) return;
@@ -291,24 +297,39 @@
         id: e.id, hash: '#/exams/' + encodeURIComponent(e.id),
         title: e.year + '년 ' + e.round.replace(/^\d+년_?/, '').replace(/_/g, ' '),
         total: e.questions.length, n: n, ok: ok,
-        pct: Math.round(ok / n * 100), last: last
+        pct: Math.round(ok / n * 100), last: last, bySubject: bys
       });
     });
-    var pn = 0, pok = 0, plast = 0;
+    var pn = 0, pok = 0, plast = 0, pbys = {};
     PREDICTED.forEach(function (p) {
       var r = st.solved['pred#' + p.id];
       if (!r) return;
       pn++; if (r.ok) pok++;
+      add(pbys, p.subject, r.ok);
       if ((r.at || 0) > plast) plast = r.at;
     });
     if (pn) {
       rows.push({
         id: 'pred', hash: '#/predict', title: '예상문제',
         total: PREDICTED.length, n: pn, ok: pok,
-        pct: Math.round(pok / pn * 100), last: plast
+        pct: Math.round(pok / pn * 100), last: plast, bySubject: pbys
       });
     }
     return rows.sort(function (a, b) { return (b.last || 0) - (a.last || 0); });
+  }
+
+  /** 과목별 점수를 작은 칩 줄로 — 회차 행·응시 기록에 함께 붙인다 */
+  function subjectChips(bySubject) {
+    if (!bySubject) return '';
+    var out = SUBJECTS.map(function (s) {
+      var b = bySubject[s];
+      if (!b || !b.n) return null;
+      var p = Math.round(b.ok / b.n * 100);
+      var cls = p < 40 ? 'bad' : p >= 60 ? 'ok' : 'warn';
+      return '<span class="subjchip ' + cls + '">' + Store.shortSubject(s) +
+        ' <b>' + p + '</b><i>' + b.ok + '/' + b.n + '</i></span>';
+    }).filter(Boolean).join('');
+    return out ? '<div class="subjchips">' + out + '</div>' : '';
   }
 
   /**
@@ -1536,11 +1557,12 @@
         '<div class="list" style="margin-top:11px">';
       rounds.forEach(function (r) {
         var doneAll = r.n >= r.total;
-        h += '<a class="item" href="' + r.hash + '">' +
-          '<div><div class="t">' + MD.esc(r.title) + '</div>' +
+        h += '<a class="item" href="' + r.hash + '" style="align-items:flex-start">' +
+          '<div style="min-width:0;flex:1"><div class="t">' + MD.esc(r.title) + '</div>' +
           '<div class="d">' + r.n + '/' + r.total + '문항 풀이' +
           (doneAll ? ' <span class="tag ok">완주</span>' : '') +
-          (r.last ? ' · 최근 ' + new Date(r.last).toLocaleDateString('ko-KR') : '') + '</div></div>' +
+          (r.last ? ' · 최근 ' + new Date(r.last).toLocaleDateString('ko-KR') : '') + '</div>' +
+          subjectChips(r.bySubject) + '</div>' +
           '<div class="right"><strong style="font-size:18px">' + r.pct + '점</strong>' +
           '<span class="small muted">' + r.ok + '/' + r.n + '</span></div></a>';
       });
@@ -1597,7 +1619,6 @@
       '<div class="list" style="margin-top:11px">';
     sessions.forEach(function (s) {
       var d = new Date(s.at);
-      var subj = Store.subjectScoreText(s.bySubject);
       var nw = s.wrongQids ? s.wrongQids.length : null;
       h += '<a class="card" href="#/session/' + s.at + '" style="padding:12px 14px;margin:0;display:block;color:inherit;text-decoration:none">' +
         '<div class="row" style="margin-bottom:5px">' +
@@ -1609,10 +1630,10 @@
         '<span class="small muted" style="margin-left:auto">' +
         d.toLocaleDateString('ko-KR') + ' ' + d.toTimeString().slice(0, 5) + ' →</span></div>' +
         '<div class="small">' +
-        (subj ? '<span class="muted">' + MD.esc(subj) + '</span> ' : '') +
-        '<strong>(평균 ' + (s.pct || 0) + '점)</strong>' +
+        '<strong>평균 ' + (s.pct || 0) + '점</strong>' +
         '<span class="muted"> · ' + (s.score || 0) + '/' + (s.total || 0) + '문항' +
         (s.elapsed ? ' · ' + Quiz.fmtTime(s.elapsed) : '') + '</span></div>' +
+        subjectChips(s.bySubject) +
         '</a>';
     });
     h += '</div></div>';

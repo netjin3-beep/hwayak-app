@@ -102,6 +102,21 @@
 
   function cur() { return Q.qs[Q.i]; }
 
+  /**
+   * 문제 지문. 〔조건〕·〔조문〕 이 들어 있으면 그 앞에서 줄을 바꿔
+   * 조건을 별도 상자로 보여준다(원본 시험지의 네모 박스와 같은 모양).
+   */
+  function stemHTML(stem) {
+    var s = String(stem || '');
+    var m = s.match(/\s*\*\*〔(조건|조문|보기|자료)〕\*\*\s*/);
+    if (!m) return '<p class="qstem">' + MD.inline(s) + '</p>';
+    var head = s.slice(0, m.index);
+    var body = s.slice(m.index + m[0].length);
+    return '<p class="qstem">' + MD.inline(head) + '</p>' +
+      '<div class="qcond"><span class="lbl">〔' + m[1] + '〕</span>' +
+      MD.inline(body) + '</div>';
+  }
+
   function render() {
     var q = cur(), c = Q.cfg;
     var answered = Q.picked.filter(function (x) { return x !== null; }).length;
@@ -123,6 +138,9 @@
         '<button class="btn sm ' + (revealMode === 'instant' ? 'primary' : 'ghost') + '" data-act="rv" ' +
         'title="해설 표시 방식 전환">해설 ' + (revealMode === 'instant' ? '자동' : '클릭') + '</button>' : '') +
       '<button class="btn sm" data-act="omr">문항표</button>' +
+      // 어느 문항에서든 제출할 수 있게 한다. 건너뛴 문항은 오답으로 채점된다.
+      (!Q.graded ? '<button class="btn sm primary" data-act="submit" ' +
+        'title="지금까지 푼 것으로 채점합니다. 건너뛴 문항은 오답 처리됩니다">제출·채점</button>' : '') +
       '</div></div>';
 
     if (Q.resumed) {
@@ -146,7 +164,7 @@
       (Store.s.bookmark[q.qid] ? '<span class="star">★</span>' : '☆') + '</button>' +
       '</div>';
 
-    h += '<p class="qstem">' + MD.inline(q.stem) + '</p>';
+    h += stemHTML(q.stem);
 
     // 문제 그림
     if (q.img && q.img.stem) {
@@ -424,9 +442,15 @@
   function submit(auto) {
     var gradable = Q.qs.filter(function (q) { return q.answer != null; });
     if (!Q.graded) {
-      if (!auto && Q.cfg.mode === 'exam') {
-        var un = Q.picked.filter(function (x) { return x === null; }).length;
-        if (un && !confirm('미응답 ' + un + '문항이 있습니다. 제출할까요?')) return;
+      // 건너뛴(미응답) 문항은 오답으로 채점된다는 것을 분명히 알리고 확인받는다.
+      if (!auto) {
+        var un = 0;
+        Q.qs.forEach(function (q, idx) {
+          if (q.answer != null && Q.picked[idx] === null) un++;
+        });
+        if (un && !confirm('건너뛴 문항이 ' + un + '개 있습니다.\n' +
+                           '지금 제출하면 이 문항들은 모두 오답으로 채점됩니다.\n\n' +
+                           '계속 제출할까요?')) return;
       }
       Q.graded = true;
       if (Q.timer) clearInterval(Q.timer);

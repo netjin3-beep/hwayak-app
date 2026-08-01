@@ -143,6 +143,12 @@ p.lead{color:var(--dim); margin:0 0 20px; font-size:14px}
   padding:4px 12px; border-radius:99px;
 }
 .qstem{font-size:17px; font-weight:600; line-height:1.6; margin:0 0 18px; letter-spacing:-.2px}
+/* 지문 아래 〔조건〕 상자 — 원본 시험지의 네모 박스와 같은 자리 */
+.qcond{
+  margin:-6px 0 18px; padding:12px 15px; font-size:15.5px; line-height:1.65;
+  background:var(--panel2); border:1px solid var(--line); border-radius:9px;
+}
+.qcond > .lbl{display:block; font-weight:700; font-size:13.5px; color:var(--dim); margin-bottom:4px}
 .choices{display:flex; flex-direction:column; gap:9px}
 .choice{
   display:flex; gap:12px; align-items:flex-start; padding:13px 15px; cursor:pointer;
@@ -564,3 +570,19 @@ main{
 .tbar > i.bad{background:var(--bad)}
 .tbar .tval{font-size:10.5px; font-weight:700; color:var(--dim)}
 .tbar .tlbl{font-size:9.5px; color:var(--dim2); white-space:nowrap}
+
+/* ── 과목별 점수 칩 (회차별 성취도·응시 기록) ── */
+.subjchips{display:flex; flex-wrap:wrap; gap:5px; margin-top:7px}
+.subjchip{
+  display:inline-flex; align-items:baseline; gap:3px;
+  font-size:11.5px; padding:2px 7px; border-radius:20px;
+  background:var(--panel2); border:1px solid var(--line); color:var(--muted);
+  white-space:nowrap;
+}
+.subjchip b{font-size:12.5px; color:var(--fg)}
+.subjchip i{font-style:normal; opacity:.6; font-size:10.5px}
+.subjchip.ok{border-color:color-mix(in srgb, var(--ok) 45%, var(--line))}
+.subjchip.ok b{color:var(--ok)}
+.subjchip.warn b{color:var(--warn)}
+.subjchip.bad{border-color:color-mix(in srgb, var(--bad) 45%, var(--line))}
+.subjchip.bad b{color:var(--bad)}
