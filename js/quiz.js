@@ -108,6 +108,19 @@
    */
   function stemHTML(stem) {
     var s = String(stem || '');
+
+    // ① 원문에 줄바꿈이 있는 지문(‘- ’ 조건 목록 등)은 그 모양 그대로 보여준다
+    if (s.indexOf('\n') >= 0) {
+      var lines = s.split('\n');
+      var head0 = lines.shift();
+      return '<p class="qstem">' + MD.inline(head0) + '</p>' +
+        '<div class="qcond">' +
+        lines.map(function (l) {
+          return '<div class="ln">' + MD.inline(l) + '</div>';
+        }).join('') + '</div>';
+    }
+
+    // ② 〔조건〕·〔조문〕 표시가 있으면 그 앞에서 줄을 바꿔 상자로 분리
     var m = s.match(/\s*\*\*〔(조건|조문|보기|자료)〕\*\*\s*/);
     if (!m) return '<p class="qstem">' + MD.inline(s) + '</p>';
     var head = s.slice(0, m.index);

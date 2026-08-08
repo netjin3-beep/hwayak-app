@@ -586,3 +586,7 @@ main{
 .subjchip.warn b{color:var(--warn)}
 .subjchip.bad{border-color:color-mix(in srgb, var(--bad) 45%, var(--line))}
 .subjchip.bad b{color:var(--bad)}
+
+/* 여러 줄 지문(‘- ’ 조건 목록) — 원문 줄바꿈 그대로 */
+.qcond > .ln{display:block}
+.qcond > .ln + .ln{margin-top:3px}

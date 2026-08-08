@@ -97,6 +97,14 @@
         out += radical(tex(r3[0]), '3');
         continue;
       }
+      // 굵게 — \textbf{} \mathbf{} \boldsymbol{} (\text 보다 먼저 걸러야 한다)
+      var mb = /^\\(textbf|mathbf|boldsymbol)/.exec(s);
+      if (mb) {
+        s = s.slice(mb[0].length);
+        var bv = arg(s); s = bv[1];
+        out += '<b>' + tex(bv[0]) + '</b>';
+        continue;
+      }
       if (s.slice(0, 5) === '\\text' || s.slice(0, 7) === '\\mathrm' || s.slice(0, 4) === '\\bar') {
         var isBar = s.slice(0, 4) === '\\bar';
         s = s.slice(isBar ? 4 : (s[2] === 'e' ? 5 : 7));
