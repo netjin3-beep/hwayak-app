@@ -32,7 +32,11 @@
     // 대문자 그리스·단위 기호 (Ω·Φ 등이 명령 이름 그대로 보이던 문제 보완)
     '\\Omega': 'Ω', '\\Phi': 'Φ', '\\Psi': 'Ψ', '\\Sigma': 'Σ',
     '\\Pi': 'Π', '\\Lambda': 'Λ', '\\Gamma': 'Γ', '\\Theta': 'Θ',
-    '\\varPhi': 'Φ', '\\varOmega': 'Ω', '\\degree': '°', '\\circ': '∘'
+    '\\varPhi': 'Φ', '\\varOmega': 'Ω', '\\degree': '°', '\\circ': '∘',
+    // 점성·감쇠 계수 등에 쓰이는 나머지 소문자 그리스
+    '\\eta': 'η', '\\zeta': 'ζ', '\\xi': 'ξ', '\\kappa': 'κ', '\\chi': 'χ',
+    '\\delta': 'δ', '\\iota': 'ι', '\\omicron': 'ο', '\\upsilon': 'υ',
+    '\\vartheta': 'ϑ', '\\varrho': 'ϱ', '\\varsigma': 'ς', '\\Xi': 'Ξ', '\\Upsilon': 'Υ'
   };
 
   /** 삼각·로그 등 함수명은 정체(로만체)로 세워 표시한다 */
@@ -95,6 +99,15 @@
       if (s.slice(0, 5) === '\\cbrt') {
         s = s.slice(5); var r3 = arg(s); s = r3[1];
         out += radical(tex(r3[0]), '3');
+        continue;
+      }
+      // 위첨자 기호 — \dot{} \ddot{} \hat{} \vec{}  (ε̇ 처럼 변형률속도 표기에 쓰인다)
+      var ac = /^\\(dot|ddot|hat|vec)/.exec(s);
+      if (ac) {
+        s = s.slice(ac[0].length);
+        var av = arg(s); s = av[1];
+        var MARK = { dot: '̇', ddot: '̈', hat: '̂', vec: '⃗' };
+        out += '<span>' + tex(av[0]) + MARK[ac[1]] + '</span>';
         continue;
       }
       // 굵게 — \textbf{} \mathbf{} \boldsymbol{} (\text 보다 먼저 걸러야 한다)
