@@ -101,6 +101,17 @@
         out += radical(tex(r3[0]), '3');
         continue;
       }
+      // \underbrace{} \overbrace{} — 묶음에 선을 긋는다.
+      // 뒤따르는 _{설명} · ^{설명} 은 아래의 첨자 처리가 그대로 받아 준다.
+      var br = /^\\(underbrace|overbrace)/.exec(s);
+      if (br) {
+        s = s.slice(br[0].length);
+        var bg = arg(s); s = bg[1];
+        var side = br[1] === 'underbrace' ? 'bottom' : 'top';
+        out += '<span style="border-' + side + ':1px solid currentColor;padding-' +
+          side + ':1px">' + tex(bg[0]) + '</span>';
+        continue;
+      }
       // 위첨자 기호 — \dot{} \ddot{} \hat{} \vec{}  (ε̇ 처럼 변형률속도 표기에 쓰인다)
       var ac = /^\\(dot|ddot|hat|vec)/.exec(s);
       if (ac) {
