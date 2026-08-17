@@ -75,6 +75,10 @@
   function tex(src) {
     var out = '', s = String(src);
     while (s.length) {
+      // 이스케이프한 기호 — \% \$ \& \# \_ \{ \} 는 글자 그대로 내보낸다
+      if (s[0] === '\\' && '%$&#_{}'.indexOf(s[1]) >= 0) {
+        out += esc(s[1]); s = s.slice(2); continue;
+      }
       if (s.slice(0, 5) === '\\frac' || s.slice(0, 6) === '\\dfrac') {
         s = s.slice(s[1] === 'd' ? 6 : 5);
         var a = arg(s); var num = a[0]; s = a[1];
