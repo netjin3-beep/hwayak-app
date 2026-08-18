@@ -311,6 +311,26 @@ label.chk{display:flex; gap:8px; align-items:center; cursor:pointer; font-size:1
 }
 .frac > .num{padding:0 .34em .06em; border-bottom:1.6px solid currentColor}
 .frac > .den{padding:.08em .34em 0}
+/* ── 행렬 ── 괄호가 내용 높이에 맞춰 늘어난다 */
+.matrix{display:inline-flex; align-items:stretch; vertical-align:middle; margin:0 .18em}
+/* 괄호는 글자가 아니라 테두리로 그려 내용 높이에 정확히 맞춘다 */
+.matrix > .mfence{width:.4em; align-self:stretch; border:1.7px solid currentColor; flex:none}
+.matrix > .mfence.l{border-right:0}
+.matrix > .mfence.r{border-left:0}
+.matrix > .mfence.p.l{border-radius:1.1em 0 0 1.1em}
+.matrix > .mfence.p.r{border-radius:0 1.1em 1.1em 0}
+.matrix > .mfence.B.l{border-radius:.5em 0 0 .5em}
+.matrix > .mfence.B.r{border-radius:0 .5em .5em 0}
+.matrix > .mfence.v{width:0; border-top:0; border-bottom:0}
+.matrix > .mfence.v.l{border-left-width:1.7px; margin-right:.28em}
+.matrix > .mfence.v.r{border-right-width:1.7px; margin-left:.28em}
+.matrix > .mbody{display:inline-flex; flex-direction:column; padding:0 .22em}
+.matrix .mrow{display:flex; justify-content:center}
+.matrix .mcell{padding:.12em .42em; text-align:center; white-space:nowrap}
+/* 행렬이 들어간 문단·표는 줄 간격을 넉넉히 */
+.md p:has(.matrix), .md li:has(.matrix){line-height:1.9}
+.qcond .matrix{margin-top:.2em}
+
 /* ── 근호 ── 안의 내용(분수 등) 높이에 맞춰 갈고리가 늘어난다 */
 .sqrt{display:inline-flex; align-items:stretch; vertical-align:middle; margin:0 .08em}
 .sqrt > .rad{width:.55em; align-self:stretch; height:auto; flex:none; overflow:visible}

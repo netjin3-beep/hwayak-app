@@ -79,6 +79,33 @@
       if (s[0] === '\\' && '%$&#_{}'.indexOf(s[1]) >= 0) {
         out += esc(s[1]); s = s.slice(2); continue;
       }
+      // 행렬 — \begin{pmatrix} a & b \\ c & d \end{pmatrix}
+      // pmatrix( ) · bmatrix[ ] · vmatrix| | · matrix(괄호 없음) 을 지원한다.
+      var mx = /^\\begin\{(p|b|v|B|)matrix\}/.exec(s);
+      if (mx) {
+        var kind = mx[1];
+        var endTag = '\\end{' + kind + 'matrix}';
+        var body = s.slice(mx[0].length);
+        var stop = body.indexOf(endTag);
+        if (stop < 0) stop = body.length;
+        var inner = body.slice(0, stop);
+        s = body.slice(stop + endTag.length);
+        // 열 구분자는 &, 다만 이 시점에는 이미 &amp; 로 이스케이프되어 있다.
+        var rows = inner.split('\\\\').map(function (row) {
+          return '<span class="mrow">' +
+            row.split(/&amp;|&/).map(function (cell) {
+              return '<span class="mcell">' + tex(cell.trim()) + '</span>';
+            }).join('') + '</span>';
+        }).join('');
+        // 괄호는 글자가 아니라 테두리로 그린다 — 내용 높이에 맞춰 늘어나야 하기 때문
+        var f = kind || 'n';
+        out += '<span class="matrix">' +
+               (kind ? '<span class="mfence l ' + f + '"></span>' : '') +
+               '<span class="mbody">' + rows + '</span>' +
+               (kind ? '<span class="mfence r ' + f + '"></span>' : '') +
+               '</span>';
+        continue;
+      }
       if (s.slice(0, 5) === '\\frac' || s.slice(0, 6) === '\\dfrac') {
         s = s.slice(s[1] === 'd' ? 6 : 5);
         var a = arg(s); var num = a[0]; s = a[1];
