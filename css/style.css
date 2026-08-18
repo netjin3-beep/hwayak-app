@@ -590,3 +590,4 @@ main{
 /* 여러 줄 지문(‘- ’ 조건 목록) — 원문 줄바꿈 그대로 */
 .qcond > .ln{display:block}
 .qcond > .ln + .ln{margin-top:3px}
+.qcond > .ln.bul::before{content:"·";display:inline-block;width:12px;opacity:.65}

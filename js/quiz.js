@@ -113,10 +113,15 @@
     if (s.indexOf('\n') >= 0) {
       var lines = s.split('\n');
       var head0 = lines.shift();
+      // 조건이 두 줄 이상이면 '- '를 점 기호로 바꿔 목록처럼 보여준다.
+      // 한 줄뿐이면 기호 없이 문장만 보여주는 편이 깔끔하다.
+      var multi = lines.length > 1;
       return '<p class="qstem">' + MD.inline(head0) + '</p>' +
         '<div class="qcond">' +
         lines.map(function (l) {
-          return '<div class="ln">' + MD.inline(l) + '</div>';
+          var bul = /^-\s/.test(l);
+          return '<div class="ln' + (bul && multi ? ' bul' : '') + '">' +
+            MD.inline(l.replace(/^-\s+/, '')) + '</div>';
         }).join('') + '</div>';
     }
 
