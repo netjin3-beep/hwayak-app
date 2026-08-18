@@ -79,6 +79,13 @@
       if (s[0] === '\\' && '%$&#_{}'.indexOf(s[1]) >= 0) {
         out += esc(s[1]); s = s.slice(2); continue;
       }
+      // 간격 명령 — \! 는 붙임(음수 간격), \, \: \; 는 얇은 간격
+      var sp = /^\\([!,;:])/.exec(s);
+      if (sp) {
+        s = s.slice(2);
+        if (sp[1] !== '!') out += '<span style="display:inline-block;width:.17em"></span>';
+        continue;
+      }
       // 행렬 — \begin{pmatrix} a & b \\ c & d \end{pmatrix}
       // pmatrix( ) · bmatrix[ ] · vmatrix| | · matrix(괄호 없음) 을 지원한다.
       var mx = /^\\begin\{(p|b|v|B|)matrix\}/.exec(s);
