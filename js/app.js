@@ -1116,8 +1116,14 @@
       seen[k] = 1;
       var g = x._group;
       if (g && g.members && g.members.length > 1) {
-        // 가장 최근에 틀린 것을 대표로
-        var rep = g.members.slice().sort(function (a, b) { return b.last - a.last; })[0];
+        // 대표는 '가장 먼저 틀린 것'으로 고정한다.
+        // 최근순으로 잡으면 복습으로 다시 풀 때마다 대표 qid가 바뀌어,
+        // 이어 풀기의 문항 구성이 흔들린다.
+        var rep = g.members.slice().sort(function (a, b) {
+          var fa = (a.history && a.history[0] && a.history[0].at) || a.last || 0;
+          var fb = (b.history && b.history[0] && b.history[0].at) || b.last || 0;
+          return fa - fb || String(a.qid).localeCompare(String(b.qid));
+        })[0];
         rep._group = g;
         out.push(rep);
       } else {
@@ -1323,23 +1329,34 @@
     var SET_N = 20;
 
     /** 이 문항을 '처음' 틀린 시각 — 없으면 마지막 오답 시각 */
+    /**
+     * 이 문항을 '처음' 틀린 시각. 복습으로 다시 풀어도 값이 변하지 않아야
+     * 묶음 구성이 흔들리지 않는다(history[0]은 새 오답이 쌓여도 그대로다).
+     * history가 없는 옛 기록은 last로 대신하되, 그것도 없으면 qid로 순서를 고정한다.
+     */
     function firstWrongAt(x) {
+      function firstOf(y) {
+        var h = y.history || [];
+        return (h.length && h[0].at) ? h[0].at : (y.firstAt || y.last || 0);
+      }
       var g = x._group;
       if (g && g.members && g.members.length) {
-        return g.members.reduce(function (m, y) {
-          var h = y.history || [];
-          var t = (h.length && h[0].at) ? h[0].at : (y.last || 0);
-          return (t && (!m || t < m)) ? t : m;
-        }, 0) || (x.last || 0);
+        var m = 0;
+        g.members.forEach(function (y) {
+          var t = firstOf(y);
+          if (t && (!m || t < m)) m = t;
+        });
+        if (m) return m;
       }
-      var h0 = x.history || [];
-      return (h0.length && h0[0].at) ? h0[0].at : (x.last || 0);
+      return firstOf(x);
     }
 
     /** 복습 대상을 '먼저 틀린 순'으로 정렬 */
     function reviewOrder() {
       return shownList().slice().sort(function (a, b) {
-        return firstWrongAt(a) - firstWrongAt(b) || (a.last || 0) - (b.last || 0);
+        // 동률이면 qid로 갈라 순서를 완전히 고정한다(답을 다시 해도 자리가 바뀌지 않게)
+        return firstWrongAt(a) - firstWrongAt(b) ||
+               String(a.qid).localeCompare(String(b.qid));
       });
     }
 
@@ -1374,12 +1391,28 @@
       return 0;
     }
 
+    /** qid로 오답노트 항목 하나를 꺼낸다(최신 본문으로) */
+    function itemByQid(id) {
+      var raw = Store.s.wrong[id];
+      return raw ? freshWrong(raw) : null;
+    }
+
     function startSet(k) {
       var all = reviewOrder();
       var sets = setsOf(all);
       if (!sets.length) { toast('복습할 문항이 없습니다'); return; }
       if (k >= sets.length) k = sets.length - 1;
-      var part = sets[k];
+
+      // ── 이어 풀기: 시작할 때의 문항 구성을 그대로 되살린다 ──
+      // 복습 도중 답을 하면 '최근에 틀린 시각'이 바뀌어 묶음 구성이 달라질 수 있다.
+      // 그래서 진행상황에 저장해 둔 문항 목록이 있으면 그것을 우선한다.
+      var part = null;
+      var saved = Store.loadProgress(setKeyOf(k));
+      if (saved && saved.qids && saved.qids.length) {
+        part = saved.qids.map(itemByQid).filter(Boolean);
+        if (!part.length) part = null;         // 전부 지워졌으면 새로 짠다
+      }
+      if (!part) part = sets[k];
       var arr = part.map(function (x) {
         var qq = toQuizQ(x);
         qq.src = x.src || '';
@@ -1387,6 +1420,7 @@
         return qq;
       });
       var from = k * SET_N + 1, to = k * SET_N + part.length;
+      var setCount = sets.length;
       var backTo = '#/wrong' + (selRound ? '/' + encodeURIComponent(selRound) : '');
       var cfg = {
         questions: arr, mode: 'study',
@@ -1394,7 +1428,7 @@
         title: (selRound ? selRound + ' ' : '') +
                (tab === 'wrong' ? '오답 복습' : '즐겨찾기 복습') +
                ' (' + from + '~' + to + ')',
-        subtitle: '먼저 틀린 문항부터 · ' + (k + 1) + '/' + sets.length + '묶음 · ' + part.length + '문항',
+        subtitle: '먼저 틀린 문항부터 · ' + (k + 1) + '/' + setCount + '묶음 · ' + part.length + '문항',
         sessionType: tab === 'wrong' ? '오답복습' : '즐겨찾기복습',
         backHash: backTo
       };
