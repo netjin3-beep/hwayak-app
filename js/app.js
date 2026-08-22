@@ -1927,6 +1927,7 @@
   // quiz.js가 '나가기' 시 해시가 안 바뀌는 경우(예: 오답노트에서 화면 전환 없이 바로
   // 시작한 복습) 직접 라우터를 호출할 수 있도록 노출한다.
   w.route = route;
+  w.toast = toast;   // 클라우드 동기화 알림에서 쓴다
 
   w.addEventListener('hashchange', route);
   function boot() {

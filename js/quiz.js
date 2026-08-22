@@ -610,5 +610,33 @@
   /** 지금 문제를 풀고 있는 중인가 — 다른 기기와 동기화할 때 화면을 건드리지 않기 위해 쓴다 */
   function active() { return !!Q && !Q.graded; }
 
-  w.Quiz = { start: start, stop: stop, fmtTime: fmtTime, CIRCLE: CIRCLE, active: active };
+  /**
+   * 다른 기기에서 푼 내용이 저장소에 들어왔을 때, 풀던 화면을 유지한 채 답만 받아온다.
+   * 이 화면에서 이미 고른 답은 그대로 두고 '비어 있던 문항'만 채운다.
+   * @returns {number} 새로 채워진 문항 수
+   */
+  function absorbProgress() {
+    if (!active() || !Q.key) return 0;
+    var pr = Store.loadProgress(Q.key);
+    if (!pr || pr.mode !== Q.cfg.mode || !pr.picked) return 0;
+    var byId = {};
+    (pr.qids || []).forEach(function (id, k) { byId[id] = k; });
+    var got = 0;
+    Q.qs.forEach(function (q, idx) {
+      var k = byId[q.qid];
+      if (k == null) return;
+      var v = pr.picked[k];
+      if (v != null && Q.picked[idx] == null) {
+        Q.picked[idx] = v;
+        Q.rec[idx] = v;                       // 이미 기록된 답으로 본다(중복 집계 방지)
+        if ((pr.shown || [])[k]) Q.shown[idx] = true;
+        got++;
+      }
+    });
+    if (got) render();
+    return got;
+  }
+
+  w.Quiz = { start: start, stop: stop, fmtTime: fmtTime, CIRCLE: CIRCLE,
+             active: active, absorbProgress: absorbProgress };
 })(window);

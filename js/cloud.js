@@ -239,6 +239,21 @@
     return out;
   }
 
+  var lastSeenUpdatedAt = 0;   // 마지막으로 받아 본 서버 기록 시각
+
+  /** 서버가 바뀌었는지만 싸게 확인한다(본문 없이 시각만) */
+  function pullMeta() {
+    return ensureSession().then(function () {
+      return api('/rest/v1/' + TABLE + '?select=updated_at&limit=1');
+    }).then(function (r) {
+      if (!r.ok) return 0;
+      return r.json();
+    }).then(function (rows) {
+      if (!rows || !rows.length) return 0;
+      return Date.parse(rows[0].updated_at) || 0;
+    }).catch(function () { return 0; });
+  }
+
   function pull() {
     return ensureSession().then(function () {
       return api('/rest/v1/' + TABLE + '?select=data,updated_at&limit=1');
@@ -261,10 +276,17 @@
    */
   var syncing = false;   // 합치는 동안의 저장이 다시 업로드를 부르지 않도록
 
-  function pullMerge() {
+  function pullMerge(opts) {
     if (!session || isLocal() || !configured() || !w.Store) return Promise.resolve(false);
-    return pull().then(function (remote) {
+    var pre = (opts && opts.force)
+      ? Promise.resolve(true)
+      : pullMeta().then(function (t) { return !t || t > lastSeenUpdatedAt; });
+    return pre.then(function (need) {
+      if (!need) return false;      // 서버에 새 내용이 없으면 본문을 받지 않는다
+      return pull();
+    }).then(function (remote) {
       if (!remote || !remote.data) return false;
+      lastSeenUpdatedAt = remote.updatedAt || lastSeenUpdatedAt;
       syncing = true;
       try { return doMerge(remote); } finally { syncing = false; }
     }).catch(function (e) {
@@ -292,10 +314,18 @@
   function syncNow() {
     var inQuiz = !!(w.Quiz && w.Quiz.active && w.Quiz.active());
     return pullMerge().then(function (changed) {
-      if (changed && !inQuiz && typeof w.route === 'function') {
+      if (!changed) return false;
+      if (inQuiz) {
+        // 풀던 화면은 유지한 채, 다른 기기에서 답한 문항만 받아 온다
+        var got = 0;
+        try { got = w.Quiz.absorbProgress(); } catch (e) {}
+        if (got && typeof w.toast === 'function') {
+          w.toast('다른 기기에서 푼 ' + got + '문항을 가져왔습니다');
+        }
+      } else if (typeof w.route === 'function') {
         try { w.route(); } catch (e) {}
       }
-      return changed;
+      return true;
     });
   }
 
@@ -304,7 +334,7 @@
     if (pushing) { pushAgain = true; return Promise.resolve(); }
     pushing = true;
     // 올리기 전에 서버 것을 먼저 합친다 — 이 기기가 모르는 다른 기기의 기록을 지우지 않도록.
-    return pullMerge().then(function () {
+    return pullMerge({ force: true }).then(function () {
       var body = JSON.stringify({
         user_id: session.user && session.user.id,
         data: w.Store ? w.Store.s : null,
@@ -316,6 +346,7 @@
         body: body
       });
     }).then(function (r) {
+      if (r.ok) lastSeenUpdatedAt = Date.now();
       setStatus(r.ok ? 'saved' : 'error');
       if (!r.ok) console.warn('동기화 실패', r.status);
     }).catch(function (e) {
@@ -340,15 +371,10 @@
      ① 탭이 다시 보일 때(폰 → 데스크탑으로 옮겨 왔을 때)
      ② 20초마다 (문제를 푸는 중에도 서버 기록은 계속 맞춰 둔다)
      ③ 온라인으로 돌아왔을 때                                        */
-  var SYNC_EVERY = 20000;
-  var syncTimer = null;
-
   function startAutoSync() {
     if (isLocal() || !configured()) return;
-    clearInterval(syncTimer);
-    syncTimer = setInterval(function () {
-      if (document.visibilityState === 'visible') syncNow();
-    }, SYNC_EVERY);
+    // 주기적으로 돌리지 않는다. 기기를 옮기는 순간에만 맞추면 충분하고,
+    // 그 편이 서버 호출과 배터리 모두에 이롭다.
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState === 'visible') syncNow();
     });
