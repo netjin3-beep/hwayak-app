@@ -353,6 +353,16 @@
 
     clearWrong: function (id) { delete st.wrong[id]; save(); },
     clearAllWrong: function () { snapshot('오답노트 비우기 직전', true); st.wrong = {}; save(); },
+
+    /** 다른 기기와 합쳐진 상태로 통째로 갈아끼운다(클라우드 동기화용).
+     *  화면 쪽 임시 필드(_로 시작)는 들어와도 저장되지 않는다. */
+    replaceAll: function (next) {
+      if (!next || typeof next !== 'object') return false;
+      Object.keys(def).forEach(function (k) { st[k] = (next[k] !== undefined) ? next[k] : def[k]; });
+      st.settings = Object.assign({}, def.settings, next.settings || {});
+      save();
+      return true;
+    },
     clearSessions: function () { snapshot('응시이력 비우기 직전', true); st.sessions = []; save(); },
 
     toggleBookmark: function (id) {

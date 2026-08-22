@@ -216,16 +216,63 @@
 
   var pushTimer = null, pushing = false, pushAgain = false;
 
+  /**
+   * 서버 기록을 가져와 이 기기 기록과 합친다.
+   * 다른 기기에서 푼 진행상황·오답이 곧바로 반영되고,
+   * 반대로 이 기기의 오래된 상태가 서버를 덮어쓰는 일도 막는다.
+   * @returns {Promise<boolean>} 합쳐서 바뀐 것이 있으면 true
+   */
+  var syncing = false;   // 합치는 동안의 저장이 다시 업로드를 부르지 않도록
+
+  function pullMerge() {
+    if (!session || isLocal() || !configured() || !w.Store) return Promise.resolve(false);
+    return pull().then(function (remote) {
+      if (!remote || !remote.data) return false;
+      syncing = true;
+      try { return doMerge(remote); } finally { syncing = false; }
+    }).catch(function (e) {
+      syncing = false;
+      console.warn('가져오기 실패(로컬 기록으로 계속):', e);
+      return false;
+    });
+  }
+
+  function fingerprint() {
+    var s = w.Store.s;
+    return JSON.stringify(s.progress || {}) + '|' +
+           Object.keys(s.solved || {}).length + '|' +
+           Object.keys(s.wrong || {}).length + '|' +
+           (s.sessions || []).length;
+  }
+
+  function doMerge(remote) {
+    var before = fingerprint();
+    w.Store.replaceAll(mergeState(w.Store.s, remote.data, remote.updatedAt));
+    return before !== fingerprint();
+  }
+
+  /** 다른 기기 변경을 가져와 화면에 반영한다. 문제를 푸는 중에는 화면을 건드리지 않는다. */
+  function syncNow() {
+    var inQuiz = !!(w.Quiz && w.Quiz.active && w.Quiz.active());
+    return pullMerge().then(function (changed) {
+      if (changed && !inQuiz && typeof w.route === 'function') {
+        try { w.route(); } catch (e) {}
+      }
+      return changed;
+    });
+  }
+
   function pushNow() {
     if (!session || isLocal() || !configured()) return Promise.resolve();
     if (pushing) { pushAgain = true; return Promise.resolve(); }
     pushing = true;
-    var body = JSON.stringify({
-      user_id: session.user && session.user.id,
-      data: w.Store ? w.Store.s : null,
-      updated_at: new Date().toISOString()
-    });
-    return ensureSession().then(function () {
+    // 올리기 전에 서버 것을 먼저 합친다 — 이 기기가 모르는 다른 기기의 기록을 지우지 않도록.
+    return pullMerge().then(function () {
+      var body = JSON.stringify({
+        user_id: session.user && session.user.id,
+        data: w.Store ? w.Store.s : null,
+        updated_at: new Date().toISOString()
+      });
       return api('/rest/v1/' + TABLE + '?on_conflict=user_id', {
         method: 'POST',
         headers: { 'Prefer': 'resolution=merge-duplicates,return=minimal' },
@@ -246,9 +293,30 @@
   /** 저장이 잦으므로 2초 모아서 한 번만 올린다 */
   function schedulePush() {
     if (!session || isLocal() || !configured()) return;
+    if (syncing) return;          // 서버 것을 합치는 중의 저장은 다시 올리지 않는다
     setStatus('dirty');
     clearTimeout(pushTimer);
     pushTimer = setTimeout(pushNow, 2000);
+  }
+
+  /* ── 다른 기기 변경 가져오기 ──
+     ① 탭이 다시 보일 때(폰 → 데스크탑으로 옮겨 왔을 때)
+     ② 20초마다 (문제를 푸는 중에도 서버 기록은 계속 맞춰 둔다)
+     ③ 온라인으로 돌아왔을 때                                        */
+  var SYNC_EVERY = 20000;
+  var syncTimer = null;
+
+  function startAutoSync() {
+    if (isLocal() || !configured()) return;
+    clearInterval(syncTimer);
+    syncTimer = setInterval(function () {
+      if (document.visibilityState === 'visible') syncNow();
+    }, SYNC_EVERY);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') syncNow();
+    });
+    w.addEventListener('focus', function () { syncNow(); });
+    w.addEventListener('online', function () { syncNow(); });
   }
 
   /* ── 상단 동기화 표시 ── */
@@ -323,7 +391,7 @@
   function boot() {
     // 로컬이면 클라우드 기능을 켜지 않는다 — 기존 동작 그대로
     if (isLocal() || !configured()) {
-      w.CLOUD = { enabled: false, schedulePush: function () {}, logout: function () {} };
+      w.CLOUD = { enabled: false, schedulePush: function () {}, syncNow: function () { return Promise.resolve(false); }, logout: function () {} };
       return Promise.resolve(false);
     }
 
@@ -331,6 +399,7 @@
       enabled: true,
       schedulePush: schedulePush,
       pushNow: pushNow,
+      syncNow: syncNow,
       logout: logout,
       email: function () { return session && session.user && session.user.email; }
     };
@@ -361,6 +430,7 @@
         var merged = mergeState(local, remote && remote.data, remote && remote.updatedAt);
         if (merged) localStorage.setItem(LS_STATE, JSON.stringify(merged));
         restoreShell();   // 로딩 화면을 걷어내고 원래 앱 껍데기로 되돌린다
+        startAutoSync();  // 이후로는 다른 기기 변경을 주기적으로 가져온다
         return true;
       })
       .catch(function (e) {

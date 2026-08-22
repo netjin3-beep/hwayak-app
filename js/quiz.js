@@ -607,5 +607,8 @@
     if (document.visibilityState === 'hidden') persist();
   });
 
-  w.Quiz = { start: start, stop: stop, fmtTime: fmtTime, CIRCLE: CIRCLE };
+  /** 지금 문제를 풀고 있는 중인가 — 다른 기기와 동기화할 때 화면을 건드리지 않기 위해 쓴다 */
+  function active() { return !!Q && !Q.graded; }
+
+  w.Quiz = { start: start, stop: stop, fmtTime: fmtTime, CIRCLE: CIRCLE, active: active };
 })(window);

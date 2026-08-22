@@ -1887,8 +1887,16 @@
   }
 
   /* ══════════════ 라우터 ══════════════ */
+  var lastSyncAt = 0;
+
   function route() {
     Quiz.stop();
+    // 화면을 옮길 때(특히 이어 풀기 직전) 다른 기기에서 푼 내용을 먼저 가져온다.
+    // 짧은 간격의 연속 이동에서는 건너뛴다.
+    if (w.CLOUD && w.CLOUD.enabled && Date.now() - lastSyncAt > 5000) {
+      lastSyncAt = Date.now();
+      try { w.CLOUD.syncNow(); } catch (e) {}
+    }
     var hash = location.hash.replace(/^#\/?/, '') || 'home';
     var parts = hash.split('/').map(decodeURIComponent);
 
