@@ -570,10 +570,15 @@
     });
     h += '</div></div>';
 
+    // 오답복습처럼 여러 묶음으로 나눠 푸는 경우 — 바로 다음 묶음으로 이어 갈 수 있게 한다
+    var ns = Q.cfg.nextSet;
     h += '<div class="row" style="justify-content:center;margin-top:18px">' +
       '<button class="btn" data-act="review" data-i="0">문항별 해설 보기</button>' +
       '<button class="btn" data-act="wrongnote">오답노트로 →</button>' +
-      '<button class="btn primary" data-act="home">홈으로</button></div></div>';
+      (ns ? '<button class="btn primary" data-act="nextset">' + MD.esc(ns.label) + '</button>' +
+            '<button class="btn" data-act="home">홈으로</button>'
+          : '<button class="btn primary" data-act="home">홈으로</button>') +
+      '</div></div>';
 
     el('view').innerHTML = h;
     el('view').querySelectorAll('[data-act]').forEach(function (nd) {
@@ -582,6 +587,7 @@
         if (a === 'review') { Q.i = +nd.dataset.i; render(); }
         else if (a === 'home') { var b = Q.cfg.backHash || '#/home'; stop(); goHash(b); }
         else if (a === 'wrongnote') { stop(); goHash('#/wrong'); }
+        else if (a === 'nextset') { var run = Q.cfg.nextSet && Q.cfg.nextSet.run; stop(); if (run) run(); }
       });
     });
     window.scrollTo(0, 0);

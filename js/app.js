@@ -1192,7 +1192,11 @@
   /* ══════════════ 오답노트 ══════════════ */
   /** roundArg: '#/wrong/<회차 라벨>' 로 들어오면 그 회차가 선택된 채로 열린다 */
   function viewWrong(roundArg) {
-    var wrongList = Object.keys(Store.s.wrong).map(function (k) { return Store.s.wrong[k]; });
+    // 얕은 복사본으로 다룬다 — markRepeats가 붙이는 _group 이 저장소 객체에 남으면
+    // _group.members 가 자기 자신을 다시 가리켜 순환 구조가 되고, 그러면 저장(JSON) 자체가 깨진다.
+    var wrongList = Object.keys(Store.s.wrong).map(function (k) {
+      return Object.assign({}, Store.s.wrong[k]);
+    });
     markRepeats(wrongList);
     wrongList = dedupeByStem(wrongList);   // 회차만 다른 같은 문제는 한 장으로
     // 반복 오답(여러 번 틀린 것)을 맨 위로
@@ -1247,6 +1251,70 @@
       var l = curList();
       var sel = selSubjects();
       return sel.length ? l.filter(function (x) { return selected[x.subject]; }) : l;
+    }
+
+    /* ── 오답 복습은 20문항씩 끊어서, 먼저 틀린 문항부터 ── */
+    var SET_N = 20;
+
+    /** 이 문항을 '처음' 틀린 시각 — 없으면 마지막 오답 시각 */
+    function firstWrongAt(x) {
+      var g = x._group;
+      if (g && g.members && g.members.length) {
+        return g.members.reduce(function (m, y) {
+          var h = y.history || [];
+          var t = (h.length && h[0].at) ? h[0].at : (y.last || 0);
+          return (t && (!m || t < m)) ? t : m;
+        }, 0) || (x.last || 0);
+      }
+      var h0 = x.history || [];
+      return (h0.length && h0[0].at) ? h0[0].at : (x.last || 0);
+    }
+
+    /** 복습 대상을 '먼저 틀린 순'으로 정렬 */
+    function reviewOrder() {
+      return shownList().slice().sort(function (a, b) {
+        return firstWrongAt(a) - firstWrongAt(b) || (a.last || 0) - (b.last || 0);
+      });
+    }
+
+    function setsOf(list) {
+      var out = [];
+      for (var i = 0; i < list.length; i += SET_N) out.push(list.slice(i, i + SET_N));
+      return out;
+    }
+
+    /** k번째(0-base) 묶음을 푼다. 끝나면 다음 묶음으로 이어 갈 수 있다. */
+    function startSet(k) {
+      var all = reviewOrder();
+      var sets = setsOf(all);
+      if (!sets.length) { toast('복습할 문항이 없습니다'); return; }
+      if (k >= sets.length) k = sets.length - 1;
+      var part = sets[k];
+      var arr = part.map(function (x) {
+        return {
+          qid: x.qid, stem: x.stem, choices: x.choices, answer: x.answer,
+          explanation: x.explanation, hint: x.hint, subject: x.subject,
+          src: x.src || '', srcLabel: x.srcLabel, incomplete: !!x.incomplete
+        };
+      });
+      var from = k * SET_N + 1, to = k * SET_N + part.length;
+      var backTo = '#/wrong' + (selRound ? '/' + encodeURIComponent(selRound) : '');
+      var cfg = {
+        questions: arr, mode: 'study',
+        title: (selRound ? selRound + ' ' : '') +
+               (tab === 'wrong' ? '오답 복습' : '즐겨찾기 복습') +
+               ' (' + from + '~' + to + ')',
+        subtitle: '먼저 틀린 문항부터 · ' + (k + 1) + '/' + sets.length + '묶음 · ' + part.length + '문항',
+        sessionType: tab === 'wrong' ? '오답복습' : '즐겨찾기복습',
+        backHash: backTo
+      };
+      if (k + 1 < sets.length) {
+        cfg.nextSet = {
+          label: '다음 ' + Math.min(SET_N, all.length - (k + 1) * SET_N) + '문항 →',
+          run: function () { startSet(k + 1); }
+        };
+      }
+      Quiz.start(cfg);
     }
 
     /** 회차 선택 상자 — 전체 + 회차별 개수 */
@@ -1328,7 +1396,23 @@
         (tab === 'wrong'
           ? '<button class="btn sm" id="btnClearAll">' + (selRound ? '이 회차 오답 비우기' : '전체 비우기') + '</button>'
           : '') +
-        '</div></div></div>';
+        '</div></div>';
+
+      // 20문항이 넘으면 묶음으로 나눠 보여준다 — 먼저 틀린 문항이 앞 묶음에 온다
+      var setList = setsOf(reviewOrder());
+      if (setList.length > 1) {
+        h += '<div class="small muted" style="margin-top:12px;margin-bottom:7px">' +
+          '<strong>' + SET_N + '문항씩 ' + setList.length + '묶음</strong> · 먼저 틀린 문항부터 순서대로 나왔습니다. ' +
+          '한 묶음을 마치면 바로 다음 묶음으로 이어 갈 수 있습니다.</div>' +
+          '<div class="row" style="flex-wrap:wrap;gap:7px">';
+        setList.forEach(function (part, k) {
+          var from = k * SET_N + 1, to = k * SET_N + part.length;
+          h += '<button class="btn sm ' + (k === 0 ? 'primary' : 'ghost') + '" data-set="' + k + '">' +
+            from + '~' + to + '</button>';
+        });
+        h += '</div>';
+      }
+      h += '</div>';
 
       h += '<div class="list">';
       shown.forEach(function (x) {
@@ -1426,24 +1510,10 @@
       if (clearSelBtn) clearSelBtn.onclick = function () { selected = {}; render(); };
 
       var reviewBtn = el('btnReview');
-      if (reviewBtn) reviewBtn.onclick = function () {
-        var arr = shownList().map(function (x) {
-          return {
-            qid: x.qid, stem: x.stem, choices: x.choices, answer: x.answer,
-            explanation: x.explanation, hint: x.hint, subject: x.subject,
-            srcLabel: x.srcLabel, incomplete: !!x.incomplete
-          };
-        });
-        if (!arr.length) { toast('복습할 문항이 없습니다'); return; }
-        var sel = selSubjects();
-        Quiz.start({
-          questions: shuffle(arr), mode: 'study',
-          title: (selRound ? selRound + ' ' : '') + (tab === 'wrong' ? '오답 복습' : '즐겨찾기 복습'),
-          subtitle: (sel.length ? sel.join(', ') : selRound || '전체') + ' · ' + arr.length + '문항',
-          sessionType: tab === 'wrong' ? '오답복습' : '즐겨찾기복습',
-          backHash: '#/wrong' + (selRound ? '/' + encodeURIComponent(selRound) : '')
-        });
-      };
+      if (reviewBtn) reviewBtn.onclick = function () { startSet(0); };
+      view().querySelectorAll('[data-set]').forEach(function (n) {
+        n.onclick = function () { startSet(+n.dataset.set); };
+      });
       var clearAllBtn = el('btnClearAll');
       if (clearAllBtn) clearAllBtn.onclick = function () {
         if (selRound) {

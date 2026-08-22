@@ -30,11 +30,15 @@
   var lastSaveError = null;
   var muted = 0, dirty = false;   // 여러 문항을 한꺼번에 기록할 때 저장을 한 번으로 모은다
 
+  /** 화면 쪽에서 임시로 붙인 '_'로 시작하는 필드는 저장하지 않는다.
+   *  (그런 필드가 순환 구조를 만들면 JSON 변환이 통째로 실패해 기록이 유실된다) */
+  function omitTemp(k, v) { return (k.charAt(0) === '_') ? undefined : v; }
+
   function save() {
     if (muted) { dirty = true; return; }
     lastSaveError = null;
     try {
-      localStorage.setItem(KEY, JSON.stringify(st));
+      localStorage.setItem(KEY, JSON.stringify(st, omitTemp));
     } catch (e) {
       // 용량이 꽉 찬 경우: 자동 스냅샷을 줄여 자리를 만들고 한 번 더 시도한다.
       // (본 기록을 지키는 것이 스냅샷을 지키는 것보다 우선)
@@ -43,11 +47,11 @@
         while (b.length > 1) {
           b.pop();
           localStorage.setItem(BAK, JSON.stringify(b));
-          try { localStorage.setItem(KEY, JSON.stringify(st)); return afterSave(); }
+          try { localStorage.setItem(KEY, JSON.stringify(st, omitTemp)); return afterSave(); }
           catch (e2) { /* 계속 줄인다 */ }
         }
         localStorage.removeItem(BAK);
-        localStorage.setItem(KEY, JSON.stringify(st));
+        localStorage.setItem(KEY, JSON.stringify(st, omitTemp));
       } catch (e3) {
         lastSaveError = e3;
         console.warn('저장 실패(용량 초과 가능):', e3);
@@ -255,7 +259,10 @@
         st.wrong[id] = {
           qid: id, subject: q.subject, stem: q.stem, choices: q.choices,
           answer: q.answer, explanation: q.explanation || '', hint: q.hint || '',
-          picked: picked, src: q.src || '', srcLabel: q.srcLabel || '',
+          // 오답복습으로 다시 푼 경우 출처가 넘어오지 않을 수 있어, 비어 있으면 원래 값을 지킨다
+          picked: picked,
+          src: q.src || (prev && prev.src) || '',
+          srcLabel: q.srcLabel || (prev && prev.srcLabel) || '',
           count: (prev ? (prev.count || 0) : 0) + (sameSess ? 0 : 1), last: now,
           history: hist,
           lastOk: false
