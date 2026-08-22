@@ -623,13 +623,15 @@ main{
 .atlog[open] > summary::before{content:"▾ "}
 .atbody{padding:4px 0}
 .atrow{
-  display:grid; grid-template-columns:44px 82px minmax(96px,auto) 1fr;
-  gap:8px; align-items:center; padding:6px 12px; font-size:13px;
+  display:grid; grid-template-columns:44px 82px minmax(0,max-content) 1fr;
+  gap:6px 10px; align-items:center; padding:6px 12px; font-size:13px;
 }
 .atrow + .atrow{border-top:1px solid var(--line)}
 .atrow .atno{color:var(--accent2); font-weight:650}
-.atrow .atsubj{font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-@media (max-width:520px){
-  .atrow{grid-template-columns:38px 74px 1fr; row-gap:2px}
+.atrow .atscore{white-space:nowrap}
+/* 과목 점수는 잘라내지 않고 줄바꿈한다 — '최고' 배지가 붙어 자리가 줄어도 끝까지 보이게 */
+.atrow .atsubj{font-size:12px; white-space:normal; word-break:keep-all; line-height:1.45}
+@media (max-width:700px){
+  .atrow{grid-template-columns:38px 74px 1fr; row-gap:3px}
   .atrow .atsubj{grid-column:1 / -1; padding-left:38px}
 }
