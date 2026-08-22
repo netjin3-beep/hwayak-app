@@ -611,3 +611,25 @@ main{
 .qcond > .ln{display:block}
 .qcond > .ln + .ln{margin-top:3px}
 .qcond > .ln.bul::before{content:"·";display:inline-block;width:12px;opacity:.65}
+
+/* ── 응시·복습 기록 목록 ── */
+.atlog{margin-top:10px; border:1px solid var(--line); border-radius:10px; overflow:hidden}
+.atlog > summary{
+  cursor:pointer; padding:9px 12px; font-size:13px; background:var(--t-acc);
+  list-style:none; user-select:none;
+}
+.atlog > summary::-webkit-details-marker{display:none}
+.atlog > summary::before{content:"▸ "; color:var(--accent2)}
+.atlog[open] > summary::before{content:"▾ "}
+.atbody{padding:4px 0}
+.atrow{
+  display:grid; grid-template-columns:44px 82px minmax(96px,auto) 1fr;
+  gap:8px; align-items:center; padding:6px 12px; font-size:13px;
+}
+.atrow + .atrow{border-top:1px solid var(--line)}
+.atrow .atno{color:var(--accent2); font-weight:650}
+.atrow .atsubj{font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+@media (max-width:520px){
+  .atrow{grid-template-columns:38px 74px 1fr; row-gap:2px}
+  .atrow .atsubj{grid-column:1 / -1; padding-left:38px}
+}

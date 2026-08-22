@@ -755,6 +755,40 @@
     bindSettingsBar();
   }
 
+  /**
+   * 세트의 응시 이력 전체 — 날짜와 점수를 모두 보여준다.
+   * 최근 것이 위, 가장 잘 본 회차에 표시를 단다.
+   */
+  function attemptLog(key, opts) {
+    opts = opts || {};
+    var a = Store.attempts(key);
+    if (!a.length) return '';
+    var best = Store.bestPct(key);
+    var rows = a.map(function (x, i) {
+      var d = new Date(x.at);
+      var when = (d.getMonth() + 1) + '/' + d.getDate() +
+        ' <span class="muted">' + String(d.getHours()).padStart(2, '0') + ':' +
+        String(d.getMinutes()).padStart(2, '0') + '</span>';
+      var score = (x.n != null)
+        ? '<strong>' + x.pct + '점</strong> <span class="muted">(' + x.ok + '/' + x.n + ')</span>'
+        : '<span class="muted">기록만</span>';
+      var subj = Store.subjectScoreText(x.bySubject);
+      return '<div class="atrow">' +
+        '<span class="atno">' + (a.length - i) + '회</span>' +
+        '<span class="atwhen">' + when + '</span>' +
+        '<span class="atscore">' + score +
+        (x.pct != null && x.pct === best && a.length > 1 ? ' <span class="tag ok">최고</span>' : '') +
+        '</span>' +
+        (subj ? '<span class="atsubj muted">' + MD.esc(subj) + '</span>' : '') +
+        '</div>';
+    }).join('');
+    var title = opts.title || '응시 기록';
+    return '<details class="atlog"' + (opts.open ? ' open' : '') + '>' +
+      '<summary><strong>' + title + ' ' + a.length + '회</strong>' +
+      (best != null ? ' <span class="small muted">· 최고 ' + best + '점</span>' : '') + '</summary>' +
+      '<div class="atbody">' + rows + '</div></details>';
+  }
+
   function viewExamRound(id) {
     var exam = EXAMS.filter(function (e) { return e.id === id; })[0];
     if (!exam) { location.hash = '#/exams'; return; }
@@ -793,6 +827,7 @@
       (sumAll ? '<div class="hist" style="margin-top:6px">✔ ' + sumAll + '</div>' : '') +
       (doneAll ? '<div class="hist" style="margin-top:6px">▶ 진행 중 ' + doneAll + '/100 — ' +
         (prAll.i + 1) + '번에서 이어집니다</div>' : '') +
+      attemptLog(setKey(exam.id, 'all')) +
       '<div class="row" style="margin-top:11px">' +
       '<button class="btn primary" data-run="all|study">' + (doneAll ? '이어 풀기' : '학습 모드') + '</button>' +
       (hasKey ? '<button class="btn" data-run="all|exam">시험 모드(2시간)</button>' : '') +
@@ -812,7 +847,7 @@
         '<div class="d">' + arr.length + '문항' +
         (sm ? ' · <span class="hist">✔ ' + sm + '</span>' : '') +
         (!sm && dn ? ' · <span class="hist">진행 중 ' + dn + '/' + arr.length + '</span>' : '') +
-        '</div></div><span class="right muted">→</span></div>';
+        '</div>' + attemptLog(sk, { title: '기록' }) + '</div><span class="right muted">→</span></div>';
     });
     h += '</div></div></div>';
 
@@ -1427,6 +1462,31 @@
           ? '<button class="btn sm" id="btnClearAll">' + (selRound ? '이 회차 오답 비우기' : '전체 비우기') + '</button>'
           : '') +
         '</div></div>';
+
+      // 지금까지의 복습 기록 — 언제 몇 점이었는지 모두 남긴다
+      var revLog = (Store.s.sessions || []).filter(function (x) {
+        return x.type === (tab === 'wrong' ? '오답복습' : '즐겨찾기복습');
+      });
+      if (revLog.length) {
+        h += '<details class="atlog"><summary><strong>복습 기록 ' + revLog.length + '회</strong>' +
+          '<span class="small muted"> · 최근 ' +
+          (function (d) { return (d.getMonth() + 1) + '/' + d.getDate(); })(new Date(revLog[0].at)) +
+          '</span></summary><div class="atbody">';
+        revLog.forEach(function (x, i) {
+          var d = new Date(x.at);
+          h += '<div class="atrow">' +
+            '<span class="atno">' + (revLog.length - i) + '회</span>' +
+            '<span class="atwhen">' + (d.getMonth() + 1) + '/' + d.getDate() +
+            ' <span class="muted">' + String(d.getHours()).padStart(2, '0') + ':' +
+            String(d.getMinutes()).padStart(2, '0') + '</span></span>' +
+            '<span class="atscore">' + (x.total
+              ? '<strong>' + x.pct + '점</strong> <span class="muted">(' + x.score + '/' + x.total + ')</span>'
+              : '<span class="muted">기록만</span>') + '</span>' +
+            '<span class="atsubj muted">' + MD.esc(x.title || '') + '</span>' +
+            '</div>';
+        });
+        h += '</div></details>';
+      }
 
       // 20문항이 넘으면 묶음으로 나눠 보여준다 — 먼저 틀린 문항이 앞 묶음에 온다
       var setList = setsOf(reviewOrder());
