@@ -174,7 +174,15 @@
     h += '<div class="card">';
     h += '<div class="qhead"><span class="qno">' + (Q.i + 1) + '</span>' +
       (q.subject ? '<span class="tag acc">' + MD.esc(q.subject) + '</span>' : '') +
-      (q.srcLabel ? '<span class="tag">' + MD.esc(q.srcLabel) + '</span>' : '') +
+      // 회차 옆에 원래 문항번호를 함께 보여준다.
+      // 순서대로 푸는 기출에서는 화면 번호와 같아 군더더기이므로, 다를 때만 붙인다(오답복습·모의고사).
+      (q.srcLabel
+        ? '<span class="tag">' + MD.esc(q.srcLabel) +
+          (q.no != null && q.no !== Q.i + 1 ? ' ' + q.no + '번' : '') + '</span>'
+        : '') +
+      (q.wrongCount > 0
+        ? '<span class="tag bad" title="지금까지 이 문항을 틀린 횟수입니다">🔁 오답 ' + q.wrongCount + '회</span>'
+        : '') +
       (q.rate != null ? '<span class="tag ' + (q.rate < 50 ? 'bad' : q.rate < 70 ? 'warn' : 'ok') + '">정답률 ' + q.rate + '%</span>' : '') +
       (!hasAns ? '<span class="tag warn">정답 미확정</span>' : '') +
       (q.caution ? '<span class="tag warn" title="정답 오류신고가 접수된 문항입니다">⚠️ 주의</span>' : '') +

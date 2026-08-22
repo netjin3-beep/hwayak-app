@@ -1108,9 +1108,33 @@
   }
 
   /** 특정 회차(라벨)의 오답 문항 — 오답노트에 쌓인 것 중에서 고른다 */
+  /**
+   * 오답노트에는 '틀리던 그 시점'의 본문이 저장되어 있다.
+   * 그 뒤에 지문·보기·해설이 고쳐졌을 수 있으므로, 화면에 쓸 때는 문제은행의 최신 내용으로 덮는다.
+   * (오답 횟수·틀린 날짜 같은 기록은 그대로 둔다)
+   */
+  function freshWrong(x) {
+    var o = Object.assign({}, x);
+    var q = allQuestionsMap()[x.qid];
+    if (q) {
+      o.stem = q.stem;
+      o.choices = q.choices;
+      o.explanation = q.explanation || '';
+      o.hint = q.hint || '';
+      o.img = q.img || null;
+      o.no = q.no;
+      o.rate = q.rate;
+      o.incomplete = !!q.incomplete;
+      if (q.answer != null) o.answer = q.answer;
+      if (q.subject) o.subject = q.subject;
+      if (q.srcLabel) o.srcLabel = q.srcLabel;
+    }
+    return o;
+  }
+
   function wrongOfRound(label) {
     return Object.keys(Store.s.wrong)
-      .map(function (k) { return Store.s.wrong[k]; })
+      .map(function (k) { return freshWrong(Store.s.wrong[k]); })
       .filter(function (x) { return (x.srcLabel || '') === label; })
       .sort(function (a, b) { return (b.last || 0) - (a.last || 0); });
   }
@@ -1120,12 +1144,18 @@
     return bookmarkedList().filter(function (x) { return (x.srcLabel || '') === label; });
   }
 
-  /** 오답노트 카드 형태의 문항을 풀이 엔진이 받는 형식으로 */
-  function toQuizQ(x) {
+  /** 오답노트 카드 형태의 문항을 풀이 엔진이 받는 형식으로 (본문은 최신 것으로 채워서) */
+  function toQuizQ(x0) {
+    var x = freshWrong(x0);
+    var tail = String(x.qid || '').split('#')[1];
+    var cnt = Store.s.wrong[x.qid] && Store.s.wrong[x.qid].count;
     return {
       qid: x.qid, stem: x.stem, choices: x.choices, answer: x.answer,
       explanation: x.explanation, hint: x.hint, subject: x.subject,
-      srcLabel: x.srcLabel, incomplete: !!x.incomplete
+      srcLabel: x.srcLabel, incomplete: !!x.incomplete,
+      img: x.img || null, rate: x.rate,
+      no: x.no != null ? x.no : (/^\d+$/.test(tail || '') ? +tail : null),
+      wrongCount: cnt || 0
     };
   }
 
@@ -1192,10 +1222,11 @@
   /* ══════════════ 오답노트 ══════════════ */
   /** roundArg: '#/wrong/<회차 라벨>' 로 들어오면 그 회차가 선택된 채로 열린다 */
   function viewWrong(roundArg) {
-    // 얕은 복사본으로 다룬다 — markRepeats가 붙이는 _group 이 저장소 객체에 남으면
-    // _group.members 가 자기 자신을 다시 가리켜 순환 구조가 되고, 그러면 저장(JSON) 자체가 깨진다.
+    // freshWrong: 저장된 옛 본문 대신 문제은행의 최신 지문·보기·해설로 채운다.
+    // 동시에 얕은 복사가 되므로, markRepeats가 붙이는 _group 이 저장소 객체에 남아
+    // 순환 구조를 만들어 저장(JSON)을 깨뜨리는 일도 막는다.
     var wrongList = Object.keys(Store.s.wrong).map(function (k) {
-      return Object.assign({}, Store.s.wrong[k]);
+      return freshWrong(Store.s.wrong[k]);
     });
     markRepeats(wrongList);
     wrongList = dedupeByStem(wrongList);   // 회차만 다른 같은 문제는 한 장으로
@@ -1291,11 +1322,10 @@
       if (k >= sets.length) k = sets.length - 1;
       var part = sets[k];
       var arr = part.map(function (x) {
-        return {
-          qid: x.qid, stem: x.stem, choices: x.choices, answer: x.answer,
-          explanation: x.explanation, hint: x.hint, subject: x.subject,
-          src: x.src || '', srcLabel: x.srcLabel, incomplete: !!x.incomplete
-        };
+        var qq = toQuizQ(x);
+        qq.src = x.src || '';
+        qq.wrongCount = (x._group && x._group.total) || x.count || 0;
+        return qq;
       });
       var from = k * SET_N + 1, to = k * SET_N + part.length;
       var backTo = '#/wrong' + (selRound ? '/' + encodeURIComponent(selRound) : '');
