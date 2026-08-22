@@ -1350,6 +1350,30 @@
     }
 
     /** k번째(0-base) 묶음을 푼다. 끝나면 다음 묶음으로 이어 갈 수 있다. */
+    /** 복습 묶음의 저장 키 — 여기에 진행상황이 붙어 '이어 풀기'가 된다.
+     *  회차·과목 필터가 바뀌면 다른 세트로 본다. */
+    function setKeyOf(k) {
+      return ['wrong', tab, selRound || '전체', selSubjects().join(',') || '전과목', 'set' + k].join('|');
+    }
+
+    /** 그 묶음에 저장된 진행상황(있으면) */
+    function setProgress(k) {
+      var pr = Store.loadProgress(setKeyOf(k));
+      if (!pr || !pr.picked) return null;
+      var done = pr.picked.filter(function (x) { return x !== null; }).length;
+      return done ? { done: done, total: pr.picked.length, i: pr.i || 0 } : null;
+    }
+
+    /** 아직 다 못 푼 첫 묶음. 진행 중인 것이 있으면 그것, 없으면 0번. */
+    function firstUnfinishedSet() {
+      var n = setsOf(reviewOrder()).length;
+      for (var k = 0; k < n; k++) {
+        var pg = setProgress(k);
+        if (pg && pg.done < pg.total) return k;
+      }
+      return 0;
+    }
+
     function startSet(k) {
       var all = reviewOrder();
       var sets = setsOf(all);
@@ -1366,6 +1390,7 @@
       var backTo = '#/wrong' + (selRound ? '/' + encodeURIComponent(selRound) : '');
       var cfg = {
         questions: arr, mode: 'study',
+        setKey: setKeyOf(k),          // 진행상황 저장 → 나갔다 와도 이어 풀기
         title: (selRound ? selRound + ' ' : '') +
                (tab === 'wrong' ? '오답 복습' : '즐겨찾기 복습') +
                ' (' + from + '~' + to + ')',
@@ -1457,7 +1482,8 @@
         '</div></div>' +
         '<div class="row">' +
         (sel.length ? '<button class="btn sm ghost" id="btnClearSel">선택 해제</button>' : '') +
-        '<button class="btn primary" id="btnReview">복습하기</button>' +
+        '<button class="btn primary" id="btnReview">' +
+          (setProgress(firstUnfinishedSet()) ? '이어 풀기' : '복습하기') + '</button>' +
         (tab === 'wrong'
           ? '<button class="btn sm" id="btnClearAll">' + (selRound ? '이 회차 오답 비우기' : '전체 비우기') + '</button>'
           : '') +
@@ -1495,10 +1521,14 @@
           '<strong>' + SET_N + '문항씩 ' + setList.length + '묶음</strong> · 먼저 틀린 문항부터 순서대로 나왔습니다. ' +
           '한 묶음을 마치면 바로 다음 묶음으로 이어 갈 수 있습니다.</div>' +
           '<div class="row" style="flex-wrap:wrap;gap:7px">';
+        var firstK = firstUnfinishedSet();
         setList.forEach(function (part, k) {
           var from = k * SET_N + 1, to = k * SET_N + part.length;
-          h += '<button class="btn sm ' + (k === 0 ? 'primary' : 'ghost') + '" data-set="' + k + '">' +
-            from + '~' + to + '</button>';
+          var pg = setProgress(k);
+          h += '<button class="btn sm ' + (k === firstK ? 'primary' : 'ghost') + '" data-set="' + k + '">' +
+            from + '~' + to +
+            (pg ? ' <span class="small">▶ ' + pg.done + '/' + pg.total + '</span>' : '') +
+            '</button>';
         });
         h += '</div>';
       }
@@ -1600,7 +1630,7 @@
       if (clearSelBtn) clearSelBtn.onclick = function () { selected = {}; render(); };
 
       var reviewBtn = el('btnReview');
-      if (reviewBtn) reviewBtn.onclick = function () { startSet(0); };
+      if (reviewBtn) reviewBtn.onclick = function () { startSet(firstUnfinishedSet()); };
       view().querySelectorAll('[data-set]').forEach(function (n) {
         n.onclick = function () { startSet(+n.dataset.set); };
       });
