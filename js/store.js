@@ -324,6 +324,29 @@
       save();
     },
 
+    /**
+     * 방금 이 풀이(sess)에서 남긴 기록을 되돌린다 — 보기 선택을 취소해 '미응답'으로 되돌릴 때 쓴다.
+     * 이 풀이가 붙인 오답 표시만 걷어내고, 예전에 틀렸던 기록은 그대로 둔다.
+     */
+    unrecord: function (qid, sess) {
+      if (!qid) return;
+      var sv = st.solved[qid];
+      if (sv && (!sess || sv.sess === sess)) delete st.solved[qid];
+
+      var prev = st.wrong[qid];
+      if (prev && sess) {
+        var h0 = prev.history || [];
+        var tail = h0.length ? h0[h0.length - 1] : null;
+        if (tail && tail.sess === sess) {
+          var h1 = h0.slice(0, -1);
+          var c1 = Math.max(0, (prev.count || 1) - 1);
+          if (!h1.length && c1 <= 0) delete st.wrong[qid];
+          else st.wrong[qid] = Object.assign({}, prev, { history: h1, count: c1 });
+        }
+      }
+      save();
+    },
+
     /* ── 진행상황 자동저장 ── */
     saveProgress: function (key, data) {
       if (!key) return;

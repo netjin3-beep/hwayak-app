@@ -51,8 +51,19 @@
         Q.shown = mapped.map(function (x) { return !!(x && x.s); });
         // 복원된 답은 이미 기록에 반영된 것으로 본다(미응답은 제출 때 기록되도록 비워 둔다)
         Q.rec = Q.picked.map(function (x) { return x === null ? undefined : x; });
+        // ── 이어서 열 위치 ──
+        // ① 저장된 '보고 있던 문항'을 문항 id로 찾는다
         var curId = pr.qids && pr.qids[pr.i || 0];
-        var ci = curId ? Q.qs.findIndex(function (q) { return q.qid === curId; }) : (pr.i || 0);
+        var ci = curId ? Q.qs.findIndex(function (q) { return q.qid === curId; }) : -1;
+        // ② 못 찾으면(그 문항이 세트에서 빠졌거나 순서가 바뀐 경우)
+        //    1번으로 되돌아가지 말고 '마지막으로 답한 문항'으로 간다
+        if (ci < 0) {
+          var lastAnswered = -1;
+          Q.picked.forEach(function (v, k) { if (v !== null) lastAnswered = k; });
+          if (lastAnswered >= 0) ci = lastAnswered;
+          else if (pr.i != null) ci = pr.i;          // 답이 하나도 없으면 저장된 번호 그대로
+          else ci = 0;
+        }
         Q.i = Math.min(Math.max(ci, 0), Q.qs.length - 1);
         Q.resumed = Q.picked.some(function (x) { return x !== null; });
       }
@@ -226,6 +237,15 @@
     });
     h += '</div>';
 
+    // 답을 골랐으면 취소할 수 있게 한다(고른 보기를 다시 눌러도 같은 동작).
+    // 나중에 다시 풀려고 '미응답'으로 비워 두는 경우를 위한 것.
+    if (!Q.graded && Q.picked[Q.i] !== null) {
+      h += '<div class="row" style="justify-content:flex-end;margin-top:9px">' +
+        '<button class="btn sm ghost" data-act="unpick" ' +
+        'title="이 문항을 답하지 않은 상태로 되돌립니다 (고른 보기를 다시 눌러도 됩니다)">' +
+        '선택 취소</button></div>';
+    }
+
     // 해설 (원본 댓글 힌트는 별도로 띄우지 않고 빌드 단계에서 해설 본문에 녹여 넣는다)
     if (reveal) {
       if (hasAns) {
@@ -310,6 +330,7 @@
         else if (a === 'show') { Q.shown[Q.i] = true; persist(); render(); }
         else if (a === 'hide') { Q.shown[Q.i] = false; persist(); render(); }
         else if (a === 'submit') submit(false);
+        else if (a === 'unpick') unpick();
         else if (a === 'quit') quit();
         else if (a === 'bm') { toggleBookmark(); }
         else if (a === 'omr') {
@@ -433,6 +454,8 @@
    */
   function pick(n) {
     if (Q.graded) return;
+    // 이미 고른 보기를 다시 누르면 선택을 취소하고 '미응답'으로 되돌린다
+    if (Q.picked[Q.i] === n) { unpick(); return; }
     Q.picked[Q.i] = n;
     Q.resumed = false;
     var q = cur();
@@ -447,6 +470,24 @@
     }
     persist();
     render();
+  }
+
+  /**
+   * 보기 선택 취소 — 아직 답하지 않은 상태로 되돌린다.
+   * 이 풀이에서 남긴 기록(통계·오답노트)도 함께 걷어내고, 해설도 다시 감춘다.
+   * 예전에 틀렸던 기록은 그대로 남는다.
+   */
+  function unpick() {
+    if (Q.graded || Q.picked[Q.i] === null) return;
+    var q = cur();
+    Q.picked[Q.i] = null;
+    Q.rec[Q.i] = undefined;
+    Q.shown[Q.i] = false;
+    Q.resumed = false;
+    if (q.answer != null) Store.unrecord(q.qid, Q.sess);
+    persist();
+    render();
+    if (typeof w.toast === 'function') w.toast('선택을 취소했습니다 — 미응답으로 남습니다');
   }
 
   /** location.hash로 이동. 이미 같은 해시라면(예: 오답노트에서 시작한 복습처럼
