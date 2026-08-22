@@ -136,6 +136,43 @@
    *  - attempts       : 세트별로 이어붙인 뒤 시각으로 중복 제거
    *  - settings       : 서버가 더 최근이면 서버, 아니면 로컬
    */
+  /**
+   * 진행 중인 풀이는 '세트 통째로'가 아니라 '문항 하나하나' 단위로 합친다.
+   * 두 기기에서 번갈아(또는 동시에) 풀어도 양쪽에서 고른 답이 모두 남는다.
+   *  - 한쪽만 답한 문항 → 그 답을 쓴다
+   *  - 양쪽이 서로 다르게 답한 문항 → 나중에 저장된 쪽의 답
+   *  - 해설을 본 표시(shown)는 한쪽이라도 봤으면 본 것으로
+   *  - 세트 구성(qids·mode)이 다르면 문항을 맞출 수 없으므로 최신 것을 통째로
+   */
+  function mergeOneProgress(x, y) {
+    var newer = ((y.at || 0) >= (x.at || 0)) ? y : x;
+    var sameSet = x.mode === y.mode &&
+      x.qids && y.qids && x.qids.length === y.qids.length &&
+      x.qids.join('') === y.qids.join('');
+    if (!sameSet) return newer;
+
+    var n = x.qids.length, picked = new Array(n), shown = new Array(n), i;
+    for (i = 0; i < n; i++) {
+      var px = (x.picked || [])[i], py = (y.picked || [])[i];
+      picked[i] = (px == null) ? (py == null ? null : py)
+                : (py == null ? px : (newer === y ? py : px));
+      shown[i] = !!((x.shown || [])[i] || (y.shown || [])[i]);
+    }
+    return Object.assign({}, newer, {
+      picked: picked, shown: shown,
+      at: Math.max(x.at || 0, y.at || 0)
+    });
+  }
+
+  function mergeProgress(a, b) {
+    var out = Object.assign({}, a || {});
+    Object.keys(b || {}).forEach(function (k) {
+      var x = out[k], y = b[k];
+      out[k] = x ? mergeOneProgress(x, y) : y;
+    });
+    return out;
+  }
+
   function mergeState(local, remote, remoteUpdatedAt) {
     if (!remote) return local;
     if (!local) return remote;
@@ -152,7 +189,7 @@
     }
 
     out.solved = byLater(local.solved, remote.solved, 'at');
-    out.progress = byLater(local.progress, remote.progress, 'at');
+    out.progress = mergeProgress(local.progress, remote.progress);
 
     // 오답노트: count는 큰 값, 나머지는 최근 것
     out.wrong = Object.assign({}, local.wrong || {});
