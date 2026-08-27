@@ -2013,6 +2013,348 @@
   /* ══════════════ 라우터 ══════════════ */
   var lastSyncAt = 0;
 
+
+  /* ───────── 실기(필답형) ───────── */
+
+  function pracExams(level) {
+    return (w.PRACTICAL || []).filter(function (e) { return e.level === level; });
+  }
+
+  /** 회차 목록 — 등급(기사/산업기사)별로 칸을 나눈다.
+   *  같은 목록에 섞으면 기사 실력이 산업기사 성적에 가려진다. */
+  function viewPractical() {
+    var P = w.PRACTICAL || [];
+    if (!P.length) {
+      view().innerHTML = '<div class="empty"><div class="ico">✍️</div>실기 문제 데이터가 없습니다.</div>';
+      return;
+    }
+    var h = '<h2 class="page">실기 · 필답형</h2>' +
+      '<p class="lead">주관식으로 답을 쓰면 자동으로 채점합니다 · 최종 판정은 모범답안을 보고 본인이 정합니다</p>';
+
+    Practical.LEVELS.forEach(function (lv) {
+      var arr = pracExams(lv);
+      if (!arr.length) return;
+      h += '<div class="row" style="align-items:baseline;gap:8px;margin:22px 0 8px">' +
+        '<h3 style="margin:0">' + lv + '</h3>' +
+        (lv === '산업기사'
+          ? '<span class="small muted">참고용 — 기사 통계와 따로 집계됩니다</span>' : '') +
+        '</div>';
+      h += '<div class="grid g2">';
+      arr.forEach(function (e) {
+        var done = 0, sum = 0;
+        e.questions.forEach(function (q) {
+          var r = Store.prac(Practical.qidOf(e, q));
+          if (r && r.ans) { done++; sum += pracScore(r); }
+        });
+        var pct = done ? Math.round(sum / e.questions.length * 100) : null;
+        h += '<a class="item" href="#/practical/' + encodeURIComponent(e.id) + '">' +
+          '<div><strong>' + MD.esc(e.label) + '</strong>' +
+          '<div class="small muted" style="margin-top:3px">' + e.questions.length + '문항 · ' +
+          MD.esc((e.src || '').replace(/\s*스캔본 판독\s*$/, '')) + '</div></div>' +
+          '<div class="right">' + (done
+            ? '<span class="tag ' + (pct >= 60 ? 'ok' : 'bad') + '">' + pct + '%</span>' +
+              '<div class="small muted">' + done + '/' + e.questions.length + '문항</div>'
+            : '<span class="small muted">시작 전</span>') + '</div></a>';
+      });
+      h += '</div>';
+    });
+    view().innerHTML = h;
+  }
+
+  /** 최종 점수 — 본인 판정(self)이 있으면 그것을 따른다. 없으면 자동채점값. */
+  function pracScore(r) {
+    if (!r) return 0;
+    if (r.self != null) return r.self;
+    return r.auto || 0;
+  }
+
+  function viewPracticalRound(id) {
+    var e = Practical.byId(id);
+    if (!e) { location.hash = '#/practical'; return; }
+
+    var h = '<div class="row" style="justify-content:space-between;align-items:center">' +
+      '<h2 class="page" style="margin:0">' + MD.esc(e.label) +
+      ' <span class="tag ' + (e.level === '기사' ? 'acc' : '') + '">' + e.level + '</span></h2>' +
+      '<a class="btn sm" href="#/practical">← 회차 목록</a></div>' +
+      '<p class="lead">' + MD.esc(e.src) + '</p>' +
+      '<div class="card" id="pracSum"></div>';
+
+    e.questions.forEach(function (q) {
+      var qid = Practical.qidOf(e, q);
+      var r = Store.prac(qid) || {};
+      h += '<div class="card pracq" data-qid="' + qid + '" data-no="' + q.no + '">' +
+        '<div class="row" style="justify-content:space-between;align-items:baseline">' +
+        '<strong>' + q.no + '번</strong>' +
+        '<span class="small muted">' + MD.esc(q.subject) + ' · ' + MD.esc(q.type) + '</span></div>' +
+        '<div class="md qstem" style="margin:8px 0 4px">' + MD.render(q.stem) + '</div>' +
+        (q.img ? '<div style="margin:8px 0"><img src="' + q.img +
+                 '" alt="문제 그림" style="max-width:100%;border-radius:8px"></div>' : '') +
+        '<textarea class="pracin" rows="3" placeholder="답을 쓰세요">' + MD.esc(r.ans || '') + '</textarea>' +
+        '<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap">' +
+        '<button class="btn sm" data-act="pgrade">채점</button>' +
+        '<button class="btn sm ghost" data-act="pshow">모범답안</button>' +
+        '<button class="btn sm ghost" data-act="pcopy">Claude 채점용 복사</button>' +
+        '</div>' +
+        '<div class="pracres"></div>' +
+        '<div class="pracans" hidden>' +
+          '<div class="md"><strong>모범답안</strong><br>' + MD.render(q.answer) + '</div>' +
+          (q.solution ? '<details style="margin-top:8px"><summary>풀이</summary>' +
+                        '<div class="md small">' + MD.render(q.solution) + '</div></details>' : '') +
+          (q.note ? '<div class="warn small" style="margin-top:8px">※ ' + MD.render(q.note) + '</div>' : '') +
+        '</div></div>';
+    });
+    view().innerHTML = h;
+
+    // 저장된 채점 결과 복원
+    e.questions.forEach(function (q) {
+      var r = Store.prac(Practical.qidOf(e, q));
+      if (r && r.ans) doGrade(e, q, false);
+    });
+    pracSummary(e);
+
+    view().addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-act]'); if (!b) return;
+      var card = b.closest('.pracq'); if (!card) return;
+      var q = e.questions.filter(function (x) { return x.no === +card.dataset.no; })[0];
+      var act = b.dataset.act;
+      if (act === 'pgrade') { doGrade(e, q, true); pracSummary(e); }
+      else if (act === 'pshow') {
+        var box = card.querySelector('.pracans');
+        box.hidden = !box.hidden;
+        b.textContent = box.hidden ? '모범답안' : '모범답안 닫기';
+      } else if (act === 'pcopy') copyForClaude(e, q, card);
+      else if (act === 'pself') {
+        var qid = Practical.qidOf(e, q);
+        Store.recordPrac(qid, { self: parseFloat(b.dataset.v) });
+        doGrade(e, q, false); pracSummary(e);
+        toast('최종 판정을 기록했습니다');
+      }
+    });
+    view().addEventListener('input', function (ev) {
+      if (!ev.target.classList.contains('pracin')) return;
+      var card = ev.target.closest('.pracq');
+      clearTimeout(card._t);
+      card._t = setTimeout(function () {
+        Store.recordPrac(card.dataset.qid, { ans: ev.target.value });
+      }, 600);
+    });
+  }
+
+  function doGrade(e, q, save) {
+    var card = view().querySelector('.pracq[data-no="' + q.no + '"]');
+    if (!card) return;
+    var qid = Practical.qidOf(e, q);
+    var ans = card.querySelector('.pracin').value;
+    var g = Practical.grade(q, ans);
+    if (save) Store.recordPrac(qid, { ans: ans, auto: g.score });
+    var r = Store.prac(qid) || {};
+
+    var mark = g.score === 1 ? '○' : g.score > 0 ? '△' : '✕';
+    var cls = g.score === 1 ? 'ok' : g.score > 0 ? '' : 'bad';
+    var h = '<div class="pracverdict ' + cls + '">' +
+      '<span class="pmark">' + mark + '</span>' +
+      '<span>' + MD.esc(g.msg) + '</span>' +
+      '<span class="small muted">자동채점 ' + Math.round(g.score * 100) + '%</span></div>';
+
+    // 서술형은 자동채점이 결론이 될 수 없다 — 본인 판정을 받는다
+    if (!g.auto && String(ans || '').trim()) {
+      h += '<div class="pself"><span class="small">모범답안을 보고 최종 판정:</span>' +
+        [[1, '맞음 ○'], [0.5, '부분 △'], [0, '틀림 ✕']].map(function (x) {
+          return '<button class="btn sm ' + (r.self === x[0] ? '' : 'ghost') +
+                 '" data-act="pself" data-v="' + x[0] + '">' + x[1] + '</button>';
+        }).join('') + '</div>';
+    }
+    card.querySelector('.pracres').innerHTML = h;
+  }
+
+  function pracSummary(e) {
+    var box = el('pracSum'); if (!box) return;
+    var done = 0, sum = 0, need = [];
+    e.questions.forEach(function (q) {
+      var r = Store.prac(Practical.qidOf(e, q));
+      if (r && r.ans) { done++; sum += pracScore(r); }
+      if (r && r.ans && (q.grade || {}).mode === 'keywords' && r.self == null) need.push(q.no);
+    });
+    var pct = Math.round(sum / e.questions.length * 100);
+    box.innerHTML = '<div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:10px">' +
+      '<div><strong>' + done + ' / ' + e.questions.length + '문항 작성</strong>' +
+      '<div class="small muted" style="margin-top:3px">' +
+      '교재에 문항별 배점이 없어 문항 만점 대비 비율로 환산합니다</div></div>' +
+      '<div class="right"><span class="tag ' + (pct >= 60 ? 'ok' : 'bad') +
+      '" style="font-size:1.05rem">' + pct + '%</span>' +
+      '<div class="small muted">' + (sum).toFixed(1) + ' / ' + e.questions.length + '문항 상당</div>' +
+      '</div></div>' +
+      (need.length ? '<div class="warn small" style="margin-top:10px">서술형 ' + need.join(', ') +
+        '번은 자동채점만으로 판정할 수 없습니다 — 모범답안을 보고 최종 판정을 눌러주세요</div>' : '');
+  }
+
+  function copyForClaude(e, q, card) {
+    var t = '[' + e.label + ' ' + q.no + '번] ' + q.subject + '\n' +
+      '문제: ' + q.stem + '\n\n' +
+      '내 답안: ' + (card.querySelector('.pracin').value || '(작성 안 함)') + '\n\n' +
+      '모범답안: ' + q.answer + '\n\n' +
+      '위 답안을 채점해줘.';
+    var done = function () { toast('복사했습니다 — 대화창에 붙여넣으세요'); };
+    if (navigator.clipboard) navigator.clipboard.writeText(t).then(done, function () { fallbackCopy(t, done); });
+    else fallbackCopy(t, done);
+  }
+  function fallbackCopy(t, cb) {
+    var ta = document.createElement('textarea');
+    ta.value = t; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); cb(); } catch (err) { toast('복사에 실패했습니다'); }
+    document.body.removeChild(ta);
+  }
+
+
+  /* ───────── 필기 / 실기 모드 ─────────
+   * 두 시험은 형식도 범위도 달라 한 메뉴에 섞으면 길만 잃는다.
+   * 모드는 따로 저장하지 않고 현재 경로에서 끌어낸다 — 뒤로가기·북마크·
+   * 새로고침이 모두 자연스럽게 맞아떨어진다. */
+
+  var MENUS = {
+    w: [['#/home', '홈'], ['#/theory', '이론정리'], ['#/exams', '기출문제'],
+        ['#/predict', '예상문제'], ['#/mock', '모의고사'],
+        ['#/wrong', '오답노트'], ['#/stats', '통계']],
+    p: [['#/practical', '필답형'], ['#/worktype', '작업형']]
+  };
+  var PRAC_ROUTES = { practical: 1, worktype: 1 };
+
+  function modeOf(top) { return PRAC_ROUTES[top] ? 'p' : 'w'; }
+
+  function renderNav(top) {
+    var m = modeOf(top), nav = el('nav');
+    if (nav._m !== m) {
+      nav.innerHTML = MENUS[m].map(function (x) {
+        return '<a href="' + x[0] + '">' + x[1] + '</a>';
+      }).join('') + '<button id="themeBtn" title="흰색/블랙 모드 전환">🌙</button>';
+      nav._m = m;
+      var tb = el('themeBtn');
+      if (tb) tb.onclick = function () {
+        Store.setTheme(Store.s.settings.theme === 'dark' ? 'light' : 'dark');
+        applyTheme();
+      };
+      applyTheme();
+    }
+    nav.querySelectorAll('a').forEach(function (a) {
+      a.classList.toggle('active', a.getAttribute('href') === '#/' + top);
+    });
+    document.querySelectorAll('#modetab a').forEach(function (a) {
+      a.classList.toggle('active', a.dataset.mode === m);
+    });
+    var dd = el('dday');
+    if (dd) dd.textContent = (m === 'p')
+      ? '실기 · 필답형 + 작업형'
+      : Store.s.settings.examDate + ' 시행 · ' + dday();
+  }
+
+
+  /* ───────── 실기 · 작업형 ─────────
+   * 작업형은 문항이 없다. 과제는 시험장에서 시험위원이 구두로 지시하고,
+   * 공개문제에는 과제명·시간·배점·지급재료·실격사유만 실려 있다.
+   * 그래서 문제은행이 아니라 '절차 암기표'로 만든다. */
+
+  var WORK_TASKS = [
+    { name: '천공작업', min: 30, pt: 8, steps: [
+        '작업 전 발파기·저항측정기 등 기기 점검',
+        '천공 위치 표시(공간격·최소저항선 확인)',
+        '천공 방향·경사 유지, 천공장 확인',
+        '공내 슬라임 제거(공저까지 청소)',
+        '천공 깊이·직경 실측 후 기록' ] },
+    { name: '발파작업', min: 30, pt: 14, steps: [
+        '화약류 수불 확인 — 수령량·사용량·잔량',
+        '장약 전 공내 이물질·물 유무 확인',
+        '전색물 충전(전색장 확보)',
+        '결선 — 직렬/병렬/직병렬 구분, 접속부 절연테이프 처리',
+        '도통시험 — 저항측정기로 회로 저항 측정, 계산값과 대조',
+        '발파기 연결은 **맨 마지막**, 작업자 대피·경계원 배치 확인',
+        '기폭 후 대기시간 준수, 불발 여부 확인' ] },
+    { name: '소음 및 진동측정작업', min: 30, pt: 8, steps: [
+        '계측기 설치 위치 선정(수음점·보안물건 기준)',
+        '진동 픽업 수평 설치·지반 밀착 고정',
+        '측정단위 설정 — 구조물 mm/sec, 인체·가축 dB(V)',
+        '배경소음 측정 후 대상소음도 보정',
+        '측정값 기록 및 허용기준 대조·판정' ] }
+  ];
+
+  var WORK_FAIL = [
+    '수험자 본인이 시험 도중 시험에 대한 포기 의사를 표현하는 경우',
+    '주요 요구사항을 누락하거나 시험시간 내에 작업을 완료하지 못한 경우',
+    '발파작업 항목에서 0점을 받은 경우',
+    '시험 중 시험위원의 지시에 따르지 않거나 안전수칙을 위반한 경우',
+    '기타 시험위원이 시험 진행이 불가능하다고 판단한 경우'
+  ];
+
+  var WORK_MAT = [
+    ['모형 다이너마이트', 'NG 60%, φ32mm', '12개'],
+    ['모형 전기뇌관', '0호', '4개'],
+    ['모형 전기뇌관', '2·3·4·5호', '각 4개'],
+    ['모형 도폭선', '—', '2m'],
+    ['전색물', 'φ20 × 200mm', '2개'],
+    ['건전지', '대·중·소', '각 10개'],
+    ['절연테이프', '—', '적량']
+  ];
+
+  function viewWorktype() {
+    var totalPt = 0, totalMin = 0;
+    WORK_TASKS.forEach(function (t) { totalPt += t.pt; totalMin += t.min; });
+
+    var h = '<h2 class="page">실기 · 작업형</h2>' +
+      '<p class="lead">과제명 「화약류취급 및 발파작업」 · ' + totalMin + '분 · ' + totalPt + '점</p>';
+
+    h += '<div class="card warn" style="margin-bottom:16px">' +
+      '<strong>작업형에는 정해진 문항이 없습니다.</strong><br>' +
+      '<span class="small">공개문제의 요구사항은 “준비된 모의 발파작업장에서 <b>시험위원이 요구하는</b> ' +
+      '화약류취급(각종 시험포함) 및 발파작업을 실시하고 질문에 답하시오” 한 줄뿐입니다. ' +
+      '실제 과제는 시험장에서 구두로 지시되므로, 아래는 문제은행이 아니라 <b>절차 암기표</b>입니다.</span></div>';
+
+    h += '<div class="grid g2">';
+    WORK_TASKS.forEach(function (t, ti) {
+      h += '<div class="card"><div class="row" style="justify-content:space-between;align-items:baseline">' +
+        '<strong>' + t.name + '</strong>' +
+        '<span><span class="tag acc">' + t.pt + '점</span> ' +
+        '<span class="small muted">' + t.min + '분</span></span></div>' +
+        '<ol class="worksteps">';
+      t.steps.forEach(function (st, si) {
+        var k = 'wt' + ti + '_' + si;
+        h += '<li><label><input type="checkbox" data-wt="' + k + '"' +
+             (Store.s.theoryRead[k] ? ' checked' : '') + '>' +
+             '<span>' + MD.inline(st) + '</span></label></li>';
+      });
+      h += '</ol></div>';
+    });
+    h += '</div>';
+
+    h += '<div class="card" style="margin-top:16px"><strong>⚠️ 실격 사유</strong>' +
+      '<ul class="small" style="margin:9px 0 0;padding-left:19px;line-height:1.75">' +
+      WORK_FAIL.map(function (x) { return '<li>' + MD.esc(x) + '</li>'; }).join('') +
+      '</ul><div class="small muted" style="margin-top:9px">' +
+      '발파작업(14점)에서 0점을 받으면 다른 과제를 다 해도 실격입니다 — 배점이 가장 큰 과제이기도 합니다.</div></div>';
+
+    h += '<div class="card" style="margin-top:16px"><strong>지급재료</strong>' +
+      '<div class="md"><table><thead><tr><th>재료</th><th>규격</th><th>수량</th></tr></thead><tbody>' +
+      WORK_MAT.map(function (r) {
+        return '<tr><td>' + MD.esc(r[0]) + '</td><td>' + MD.esc(r[1]) + '</td><td>' + MD.esc(r[2]) + '</td></tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<div class="small muted" style="margin-top:9px">' +
+      '전기뇌관이 0·2·3·4·5호로 지급됩니다 — <b>1호가 없습니다.</b> 단차 배열을 물어볼 여지가 있는 구성입니다.</div></div>';
+
+    h += '<div class="card" style="margin-top:16px"><strong>출처</strong>' +
+      '<div class="small muted" style="margin-top:6px">' +
+      '한국산업인력공단 공개문제(과제명·시간·배점·지급재료·실격사유) 및 출제기준 세세항목. ' +
+      '절차 항목은 출제기준의 「발파작업실시」·「발파소음진동관리」 세세항목을 순서대로 정리한 것으로, ' +
+      '실제 시험위원의 지시와 다를 수 있습니다.</div></div>';
+
+    view().innerHTML = h;
+
+    view().addEventListener('change', function (ev) {
+      var c = ev.target;
+      if (!c.dataset || !c.dataset.wt) return;
+      if (c.checked) Store.s.theoryRead[c.dataset.wt] = 1;
+      else delete Store.s.theoryRead[c.dataset.wt];
+      Store.save();
+    });
+  }
+
   function route() {
     Quiz.stop();
     // 화면을 옮길 때(특히 이어 풀기 직전) 다른 기기에서 푼 내용을 먼저 가져온다.
@@ -2024,9 +2366,7 @@
     var hash = location.hash.replace(/^#\/?/, '') || 'home';
     var parts = hash.split('/').map(decodeURIComponent);
 
-    document.querySelectorAll('#nav a').forEach(function (a) {
-      a.classList.toggle('active', a.getAttribute('href') === '#/' + parts[0]);
-    });
+    renderNav(parts[0]);
 
     switch (parts[0]) {
       case 'home': viewHome(); break;
@@ -2035,6 +2375,8 @@
       case 'predict': viewPredict(); break;
       case 'mock': viewMock(); break;
       case 'wrong': viewWrong(parts[1]); break;
+      case 'practical': parts[1] ? viewPracticalRound(parts[1]) : viewPractical(); break;
+      case 'worktype': viewWorktype(); break;
       case 'stats': viewStats(); break;
       case 'session': viewSession(parts[1]); break;
       default: location.hash = '#/home';
@@ -2056,14 +2398,7 @@
   w.addEventListener('hashchange', route);
   function boot() {
     refreshData();   // 클라우드 모드에서 뒤늦게 도착한 문제 데이터를 반영
-    applyTheme();
-    var dd = el('dday');
-    if (dd) dd.textContent = Store.s.settings.examDate + ' 시행 · ' + dday();
-    var b = el('themeBtn');
-    if (b) b.onclick = function () {
-      Store.setTheme((Store.s.settings.theme || 'light') === 'light' ? 'dark' : 'light');
-      applyTheme();
-    };
+    applyTheme();    // 테마버튼·D-day 는 renderNav()가 메뉴를 그릴 때 함께 붙인다
 
     // 데이터가 없으면(클라우드에서 못 받은 경우) 화면을 그리지 않고 상황을 알린다
     if (!EXAMS.length) {

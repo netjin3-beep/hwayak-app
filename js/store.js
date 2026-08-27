@@ -14,6 +14,7 @@
     theoryRead: {},// 이론 섹션 진도
     progress: {},  // setKey -> {i, picked, qids, sess, shown, at, mode}  진행 중 풀이 자동저장
     attempts: {},  // setKey -> [{at, ok, n, pct}]  세트별 풀이 이력
+    practical: {}, // qid -> {ans, auto, self, score, at}  실기 주관식 답안·채점 (객관식과 섞지 않는다)
     settings: { examDate: '2026-08-23', theme: 'light', reveal: 'instant', lastExportAt: 0 }
   };
 
@@ -204,6 +205,7 @@
     }
 
     out.solved = byLater(a.solved, b.solved, 'at');
+    out.practical = byLater(a.practical, b.practical, 'at');
     out.progress = mergeProgress(a.progress, b.progress);
 
     out.wrong = Object.assign({}, a.wrong || {});
@@ -348,6 +350,17 @@
     },
 
     /* ── 진행상황 자동저장 ── */
+    /** 실기 답안 기록. 자동채점 점수(auto)와 본인 최종판정(self)을 함께 남긴다.
+     *  최종 점수는 self 가 있으면 self 를 따른다 — 판정 주체는 사람이다. */
+    recordPrac: function (qid, rec) {
+      if (!qid) return;
+      var prev = st.practical[qid] || {};
+      st.practical[qid] = Object.assign({}, prev, rec, { at: Date.now() });
+      save();
+    },
+    prac: function (qid) { return qid ? st.practical[qid] : null; },
+    clearPrac: function (qid) { if (qid) { delete st.practical[qid]; save(); } },
+
     saveProgress: function (key, data) {
       if (!key) return;
       st.progress[key] = Object.assign({ at: Date.now() }, st.progress[key], data);

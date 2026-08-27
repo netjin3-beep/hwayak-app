@@ -112,7 +112,8 @@
 
   var DATASETS = [
     ['exams', 'EXAMS'], ['answers', 'ANSWERS'], ['images', 'IMAGES'],
-    ['keywords', 'KEYWORDS'], ['theory', 'THEORY'], ['predicted', 'PREDICTED']
+    ['keywords', 'KEYWORDS'], ['theory', 'THEORY'], ['predicted', 'PREDICTED'],
+    ['practical', 'PRACTICAL']
   ];
 
   function loadData(onProgress) {
