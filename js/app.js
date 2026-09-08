@@ -2098,8 +2098,8 @@
         '<div class="pracres"></div>' +
         '<div class="pracans" hidden>' +
           '<div class="md"><strong>모범답안</strong><br>' + MD.render(q.answer) + '</div>' +
-          (q.solution ? '<details style="margin-top:8px"><summary>풀이</summary>' +
-                        '<div class="md small">' + MD.render(q.solution) + '</div></details>' : '') +
+          (q.solution ? '<details open style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">풀이</summary>' +
+                        '<div class="md small" style="margin-top:6px">' + MD.render(q.solution) + '</div></details>' : '') +
           (q.note ? '<div class="warn small" style="margin-top:8px">※ ' + MD.render(q.note) + '</div>' : '') +
         '</div></div>';
     });
