@@ -2099,19 +2099,34 @@
         '<textarea class="pracin" rows="3" placeholder="답을 쓰세요">' + MD.esc(r.ans || '') + '</textarea>' +
         '<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap">' +
         '<button class="btn sm" data-act="pgrade">채점</button>' +
+        '<button class="btn sm ghost" data-act="pshow">모범답안</button>' +
         '<button class="btn sm ghost" data-act="pcopy">Claude 채점용 복사</button>' +
         '</div>' +
         '<div class="pracres"></div>' +
-        '<details class="pracans">' +
-          '<summary>모범답안</summary>' +
-          '<div class="md" style="margin-top:10px">' +
+        '<div class="pracans" hidden>' +
+          '<div class="md"><strong>모범답안</strong><br>' +
             MD.render(q.answer || '모범답안이 없습니다.') + '</div>' +
           (q.solution ? '<details open style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">풀이</summary>' +
                         '<div class="md small" style="margin-top:6px">' + MD.render(q.solution) + '</div></details>' : '') +
           (q.note ? '<div class="warn small" style="margin-top:8px">※ ' + MD.render(q.note) + '</div>' : '') +
-        '</details></div>';
+        '</div></div>';
     });
     view().innerHTML = h;
+
+    // 모범답안은 채점 버튼 옆의 버튼으로 열고 닫는다.
+    // hidden 프로퍼티 대신 속성을 직접 조작해 Safari에서도 확실히 반영한다.
+    view().querySelectorAll('[data-act="pshow"]').forEach(function (b) {
+      b.onclick = function (ev) {
+        ev.preventDefault(); ev.stopPropagation();
+        var card = b.closest('.pracq');
+        var box = card && card.querySelector('.pracans');
+        if (!box) return;
+        var show = box.hasAttribute('hidden');
+        if (show) box.removeAttribute('hidden');
+        else box.setAttribute('hidden', '');
+        b.textContent = show ? '모범답안 닫기' : '모범답안';
+      };
+    });
 
     // 저장된 채점 결과 복원
     e.questions.forEach(function (q) {
