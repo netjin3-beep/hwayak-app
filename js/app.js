@@ -481,6 +481,30 @@
       '<input type="date" id="setDatePrac" value="' + (st.settings.examDatePractical || '') + '"></label>' +
       '</div></div>';
 
+    // 아이패드에서 한 번 저장해 두면 인터넷 없이도 문제·이론·해설을 사용할 수 있다.
+    var offlineLocal = !!w.__LOCAL_MODE;
+    var offlineCloud = w.CLOUD && w.CLOUD.enabled && typeof w.CLOUD.saveOffline === 'function';
+    h += '<div class="card"><strong>오프라인 사용</strong>';
+    if (offlineLocal) {
+      h += '<div class="notice" style="margin-top:11px">' +
+        '<strong>이 기기는 로컬 데이터로 실행 중입니다.</strong><br>' +
+        '인터넷 없이도 문제·이론·채점·풀이를 사용할 수 있습니다. 학습기록도 이 기기에 저장됩니다.</div>';
+    } else if (w.CLOUD && w.CLOUD.offline) {
+      h += '<div class="notice" style="margin-top:11px"><strong>오프라인 모드로 실행 중입니다.</strong><br>' +
+        '아이패드에 저장해 둔 비공개 문제·이론 데이터로 학습하고 있습니다. 인터넷이 다시 연결되면 온라인 모드로 전환됩니다.</div>';
+    } else if (offlineCloud) {
+      h += '<div class="small muted" style="margin-top:4px;line-height:1.6">' +
+        '아래 버튼을 한 번 누르면 현재 로그인한 계정의 문제·이론·해설이 이 아이패드에 저장됩니다. ' +
+        '이후 인터넷이 끊겨도 학습·채점·풀이를 계속할 수 있습니다.</div>' +
+        '<div class="row" style="margin-top:12px;align-items:center">' +
+        '<button class="btn sm" id="btnOfflineSave">오프라인 저장</button>' +
+        '<span class="small muted" id="offlineStatus">저장 상태 확인 중…</span></div>';
+    } else {
+      h += '<div class="small muted" style="margin-top:11px">' +
+        '오프라인 저장 기능을 사용하려면 인터넷 주소에서 로그인해야 합니다.</div>';
+    }
+    h += '</div>';
+
     // 저장 상태 진단
     var proto = location.protocol;
     var originLabel = proto === 'file:' ? 'index.html 직접 열기 (file://)' :
@@ -559,6 +583,33 @@
       st.settings.examDatePractical = this.value; Store.save();
       toast('실기 시험일을 저장했습니다');
     };
+
+    if (offlineCloud) {
+      var offlineStatus = el('offlineStatus');
+      var offlineBtn = el('btnOfflineSave');
+      function showOfflineInfo(info) {
+        if (!offlineStatus) return;
+        if (!info || !info.ready) {
+          offlineStatus.textContent = '아직 저장하지 않았습니다';
+          return;
+        }
+        offlineStatus.textContent = '저장됨 · ' + new Date(info.savedAt).toLocaleString('ko-KR');
+      }
+      w.CLOUD.offlineInfo().then(showOfflineInfo);
+      offlineBtn.onclick = function () {
+        offlineBtn.disabled = true;
+        offlineBtn.textContent = '저장 중…';
+        w.CLOUD.saveOffline().then(function (info) {
+          showOfflineInfo(info);
+          toast('오프라인 사용 데이터를 저장했습니다');
+        }).catch(function (e) {
+          alert(e.message || '오프라인 저장에 실패했습니다');
+        }).then(function () {
+          offlineBtn.disabled = false;
+          offlineBtn.textContent = '오프라인 저장';
+        });
+      };
+    }
 
     el('btnExport').onclick = function () {
       var b = new Blob([Store.exportJSON()], { type: 'application/json' });

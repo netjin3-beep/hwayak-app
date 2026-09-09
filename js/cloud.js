@@ -116,6 +116,119 @@
     ['practical', 'PRACTICAL'], ['practical_theory', 'PRACTICAL_THEORY']
   ];
 
+  /* ── 아이패드 오프라인 콘텐츠 보관 ──
+     공개 저장소에는 올리지 않고, 사용자가 로그인한 뒤 직접 저장한 경우에만
+     이 기기의 IndexedDB에 문제·해설·이론 데이터를 보관한다. */
+  var OFF_DB = 'hwayak_offline_v1';
+  var OFF_DATA = 'datasets';
+  var OFF_META = 'meta';
+  var OFF_META_KEY = 'state';
+
+  function openOfflineDb() {
+    if (!w.indexedDB) return Promise.reject(new Error('이 브라우저는 오프라인 저장을 지원하지 않습니다.'));
+    return new Promise(function (resolve, reject) {
+      var req;
+      try { req = w.indexedDB.open(OFF_DB, 1); }
+      catch (e) { reject(e); return; }
+      req.onupgradeneeded = function () {
+        var db = req.result;
+        if (!db.objectStoreNames.contains(OFF_DATA)) db.createObjectStore(OFF_DATA);
+        if (!db.objectStoreNames.contains(OFF_META)) db.createObjectStore(OFF_META);
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error || new Error('오프라인 저장소를 열 수 없습니다.')); };
+      req.onblocked = function () { reject(new Error('오프라인 저장소가 다른 창에서 사용 중입니다.')); };
+    });
+  }
+
+  function offlineGet(db, storeName, key) {
+    return new Promise(function (resolve, reject) {
+      var tx;
+      try {
+        tx = db.transaction(storeName, 'readonly');
+        var req = tx.objectStore(storeName).get(key);
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { reject(req.error || new Error('오프라인 데이터를 읽을 수 없습니다.')); };
+      } catch (e) { reject(e); }
+    });
+  }
+
+  function offlineInfo() {
+    return openOfflineDb().then(function (db) {
+      return offlineGet(db, OFF_META, OFF_META_KEY).then(function (meta) {
+        db.close();
+        meta = meta || {};
+        return {
+          ready: meta.datasetCount === DATASETS.length,
+          savedAt: meta.savedAt || 0,
+          datasetCount: meta.datasetCount || 0
+        };
+      });
+    }).catch(function () { return { ready: false, savedAt: 0, datasetCount: 0 }; });
+  }
+
+  function saveOfflineData() {
+    var missing = DATASETS.filter(function (d) { return w[d[1]] == null; });
+    if (missing.length) return Promise.reject(new Error('문제 데이터를 모두 불러온 뒤 다시 시도하세요.'));
+    return openOfflineDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx;
+        try {
+          tx = db.transaction([OFF_DATA, OFF_META], 'readwrite');
+          var dataStore = tx.objectStore(OFF_DATA);
+          DATASETS.forEach(function (d) { dataStore.put(w[d[1]], d[0]); });
+          var meta = {
+            savedAt: Date.now(),
+            datasetCount: DATASETS.length,
+            app: 'hwayak-app'
+          };
+          tx.objectStore(OFF_META).put(meta, OFF_META_KEY);
+          tx.oncomplete = function () { db.close(); resolve({ ready: true, savedAt: meta.savedAt, datasetCount: DATASETS.length }); };
+          tx.onerror = function () { db.close(); reject(tx.error || new Error('오프라인 저장에 실패했습니다.')); };
+          tx.onabort = function () { db.close(); reject(tx.error || new Error('오프라인 저장이 취소되었습니다.')); };
+        } catch (e) { db.close(); reject(e); }
+      });
+    });
+  }
+
+  function loadOfflineData() {
+    return openOfflineDb().then(function (db) {
+      return Promise.all([
+        Promise.all(DATASETS.map(function (d) { return offlineGet(db, OFF_DATA, d[0]); })),
+        offlineGet(db, OFF_META, OFF_META_KEY)
+      ]).then(function (parts) {
+        var values = parts[0], meta = parts[1] || {};
+        var ready = meta.datasetCount === DATASETS.length &&
+          values.every(function (value) { return value != null; });
+        if (!ready) { db.close(); return false; }
+        DATASETS.forEach(function (d, i) { w[d[1]] = values[i]; });
+        db.close();
+        return true;
+      });
+    }).catch(function (e) {
+      console.warn('오프라인 데이터 불러오기 실패:', e);
+      return false;
+    });
+  }
+
+  function useOfflineMode() {
+    w.CLOUD = {
+      enabled: false,
+      offline: true,
+      schedulePush: function () {},
+      syncNow: function () { return Promise.resolve(false); },
+      pushNow: function () { return Promise.resolve(false); },
+      logout: function () {},
+      email: function () { return session && session.user && session.user.email; },
+      saveOffline: function () { return Promise.resolve(false); },
+      offlineInfo: offlineInfo
+    };
+    // 인터넷이 다시 연결되면 세션을 확인하고 온라인 부팅으로 전환한다.
+    w.addEventListener('online', function () {
+      if (w.CLOUD && w.CLOUD.offline) setTimeout(function () { location.reload(); }, 300);
+    }, { once: true });
+  }
+
   function loadData(onProgress) {
     var done = 0;
     return Promise.all(DATASETS.map(function (d) {
@@ -455,7 +568,15 @@
   function boot() {
     // 로컬이면 클라우드 기능을 켜지 않는다 — 기존 동작 그대로
     if (isLocal() || !configured()) {
-      w.CLOUD = { enabled: false, schedulePush: function () {}, syncNow: function () { return Promise.resolve(false); }, logout: function () {} };
+      w.CLOUD = {
+        enabled: false,
+        offline: !!isLocal(),
+        schedulePush: function () {},
+        syncNow: function () { return Promise.resolve(false); },
+        logout: function () {},
+        saveOffline: function () { return Promise.resolve(false); },
+        offlineInfo: function () { return Promise.resolve({ ready: false, savedAt: 0, datasetCount: 0 }); }
+      };
       return Promise.resolve(false);
     }
 
@@ -465,8 +586,24 @@
       pushNow: pushNow,
       syncNow: syncNow,
       logout: logout,
-      email: function () { return session && session.user && session.user.email; }
+      email: function () { return session && session.user && session.user.email; },
+      saveOffline: saveOfflineData,
+      offlineInfo: offlineInfo
     };
+
+    // navigator.onLine은 비행기 모드·Wi-Fi 끊김을 빠르게 판별하는 1차 신호다.
+    // 실제 데이터는 IndexedDB에 있는지 확인하므로 잘못된 캐시 상태로 실행하지 않는다.
+    if (w.navigator && w.navigator.onLine === false) {
+      return loadOfflineData().then(function (ok) {
+        if (!ok) {
+          loginScreen('오프라인 저장 데이터가 없습니다. 처음 한 번 인터넷에 연결해 로그인하고 「오프라인 저장」을 눌러 주세요.');
+          throw { handled: true };
+        }
+        restoreShell();
+        useOfflineMode();
+        return false;
+      });
+    }
 
     if (!session) { loginScreen(); return Promise.reject({ handled: true }); }
 
@@ -499,8 +636,17 @@
       })
       .catch(function (e) {
         if (e && e.handled) throw e;
-        loginScreen(e.message || '데이터를 불러오지 못했습니다');
-        throw { handled: true };
+        // 네트워크가 끊겼지만 navigator.onLine이 true로 남는 경우도 있으므로
+        // 마지막으로 저장해 둔 콘텐츠가 있으면 오프라인 모드로 계속한다.
+        return loadOfflineData().then(function (ok) {
+          if (ok) {
+            restoreShell();
+            useOfflineMode();
+            return false;
+          }
+          loginScreen(e.message || '데이터를 불러오지 못했습니다');
+          throw { handled: true };
+        });
       });
   }
 
