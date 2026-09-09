@@ -15,7 +15,7 @@
     progress: {},  // setKey -> {i, picked, qids, sess, shown, at, mode}  진행 중 풀이 자동저장
     attempts: {},  // setKey -> [{at, ok, n, pct}]  세트별 풀이 이력
     practical: {}, // qid -> {ans, auto, self, score, at}  실기 주관식 답안·채점 (객관식과 섞지 않는다)
-    settings: { examDate: '2026-08-23', theme: 'light', reveal: 'instant', lastExportAt: 0 }
+    settings: { examDate: '2026-08-23', examDatePractical: '2026-09-20', theme: 'light', reveal: 'instant', lastExportAt: 0 }
   };
 
   var st;

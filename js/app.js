@@ -14,6 +14,7 @@
   var EXAMS = w.EXAMS || [];
   var ANSWERS = w.ANSWERS || {};
   var THEORY = w.THEORY || [];
+  var PRACTICAL_THEORY = w.PRACTICAL_THEORY || [];
   var PREDICTED = w.PREDICTED || [];
   var KEYWORDS = w.KEYWORDS || {};
   var IMAGES = w.IMAGES || {};
@@ -22,6 +23,7 @@
     EXAMS = w.EXAMS || [];
     ANSWERS = w.ANSWERS || {};
     THEORY = w.THEORY || [];
+    PRACTICAL_THEORY = w.PRACTICAL_THEORY || [];
     PREDICTED = w.PREDICTED || [];
     KEYWORDS = w.KEYWORDS || {};
     IMAGES = w.IMAGES || {};
@@ -473,8 +475,10 @@
       '<label><span>해설 표시</span>' +
       '<select id="setReveal"><option value="instant">답 고르면 바로 표시</option>' +
       '<option value="click">「해설 보기」 눌러야 표시</option></select></label>' +
-      '<label><span>시험일</span>' +
+      '<label><span>필기 시험일</span>' +
       '<input type="date" id="setDate" value="' + st.settings.examDate + '"></label>' +
+      '<label><span>실기 시험일</span>' +
+      '<input type="date" id="setDatePrac" value="' + (st.settings.examDatePractical || '') + '"></label>' +
       '</div></div>';
 
     // 저장 상태 진단
@@ -549,8 +553,11 @@
     el('setReveal').onchange = function () { Store.setReveal(this.value); toast('해설 표시 방식을 바꿨습니다'); };
     el('setDate').onchange = function () {
       st.settings.examDate = this.value; Store.save();
-      el('dday').textContent = st.settings.examDate + ' 시행 · ' + dday();
-      route();
+      renderNav('home');  // D-day 업데이트
+    };
+    el('setDatePrac').onchange = function () {
+      st.settings.examDatePractical = this.value; Store.save();
+      toast('실기 시험일을 저장했습니다');
     };
 
     el('btnExport').onclick = function () {
@@ -637,8 +644,8 @@
       '<div class="d">' + d + '</div></div><div class="right"><strong>' + v + '</strong></div></div>';
   }
 
-  function dday() {
-    var d = new Date(Store.s.settings.examDate + 'T00:00:00');
+  function dday(dateStr) {
+    var d = new Date((dateStr || Store.s.settings.examDate) + 'T00:00:00');
     var n = new Date(); n.setHours(0, 0, 0, 0);
     var diff = Math.round((d - n) / 86400000);
     return diff > 0 ? 'D-' + diff : diff === 0 ? 'D-DAY' : 'D+' + (-diff);
@@ -2215,9 +2222,9 @@
     w: [['#/home', '홈'], ['#/theory', '이론정리'], ['#/exams', '기출문제'],
         ['#/predict', '예상문제'], ['#/mock', '모의고사'],
         ['#/wrong', '오답노트'], ['#/stats', '통계']],
-    p: [['#/practical', '필답형'], ['#/worktype', '작업형']]
+    p: [['#/practical', '필답형'], ['#/practical_theory', '실기이론'], ['#/worktype', '작업형']]
   };
-  var PRAC_ROUTES = { practical: 1, worktype: 1 };
+  var PRAC_ROUTES = { practical: 1, practical_theory: 1, worktype: 1 };
 
   function modeOf(top) { return PRAC_ROUTES[top] ? 'p' : 'w'; }
 
@@ -2242,9 +2249,68 @@
       a.classList.toggle('active', a.dataset.mode === m);
     });
     var dd = el('dday');
-    if (dd) dd.textContent = (m === 'p')
-      ? '실기 · 필답형 + 작업형'
-      : Store.s.settings.examDate + ' 시행 · ' + dday();
+    if (dd) {
+      if (m === 'p') {
+        var pDate = Store.s.settings.examDatePractical;
+        dd.textContent = '실기 ' + (pDate || '날짜 미설정') + ' · ' + (pDate ? dday(pDate) : '-');
+      } else {
+        dd.textContent = Store.s.settings.examDate + ' 시행 · ' + dday();
+      }
+    }
+  }
+
+  /* ───────── 실기 · 이론정리 ─────────
+   * 필기 viewTheory와 동일한 split-view 구조.
+   * 실기이론/*.md 에서 빌드한 PRACTICAL_THEORY 배열을 사용한다. */
+  function viewPracticalTheory(subjId) {
+    if (!PRACTICAL_THEORY.length) {
+      view().innerHTML = '<div class="empty"><div class="ico">📚</div>실기 이론 데이터가 없습니다.<br>' +
+        '<span class="small">build_data.py 를 실행해 data/practical_theory.js 를 생성하세요.</span></div>';
+      return;
+    }
+    var cur = PRACTICAL_THEORY.filter(function (t) { return t.id === subjId; })[0] || PRACTICAL_THEORY[0];
+
+    var h = '<h2 class="page">실기 이론정리</h2>' +
+      '<p class="lead">필답형 기출 기반 이론 · 공식 · 계산법 정리</p>' +
+      '<div class="split"><div class="side"><div class="card" style="padding:10px">';
+    PRACTICAL_THEORY.forEach(function (t) {
+      h += '<div class="sec' + (t.id === cur.id ? ' active' : '') + '" data-go="#/practical_theory/' + t.id + '">' +
+        MD.esc(t.title) + '</div>';
+      if (t.id === cur.id) {
+        (t.toc || []).forEach(function (x) {
+          h += '<div class="toc" data-scroll="' + x.id + '">' + MD.esc(x.text) + '</div>';
+        });
+      }
+    });
+    h += '</div>';
+    h += '</div>';
+
+    h += '<div><div class="card"><div class="row" style="justify-content:space-between;margin-bottom:8px">' +
+      '<input type="search" id="ptSearch" placeholder="이 단원에서 검색…" style="flex:1">' +
+      '<button class="btn sm" id="btnPtPrint">인쇄</button></div></div>' +
+      '<div class="card md" id="ptBody">' + MD.render(cur.md) + '</div></div></div>';
+
+    view().innerHTML = h;
+
+    view().querySelectorAll('[data-go]').forEach(function (n) {
+      n.onclick = function () { location.hash = n.dataset.go; };
+    });
+    view().querySelectorAll('[data-scroll]').forEach(function (n) {
+      n.onclick = function () {
+        var t = document.getElementById(n.dataset.scroll);
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+    });
+    el('btnPtPrint').onclick = function () { window.print(); };
+    el('ptSearch').oninput = function () {
+      var q = this.value.trim();
+      var body = el('ptBody');
+      if (!q) { body.innerHTML = MD.render(cur.md); return; }
+      var re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+      body.innerHTML = MD.render(cur.md).replace(/>([^<]+)</g, function (m, txt) {
+        return '>' + txt.replace(re, '<mark style="background:var(--mark);color:var(--fg);border-radius:3px;padding:0 2px">$1</mark>') + '<';
+      });
+    };
   }
 
 
@@ -2371,6 +2437,7 @@
     switch (parts[0]) {
       case 'home': viewHome(); break;
       case 'theory': viewTheory(parts[1]); break;
+      case 'practical_theory': viewPracticalTheory(parts[1]); break;
       case 'exams': parts[1] ? viewExamRound(parts[1]) : viewExams(); break;
       case 'predict': viewPredict(); break;
       case 'mock': viewMock(); break;
