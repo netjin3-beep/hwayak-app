@@ -2099,16 +2099,17 @@
         '<textarea class="pracin" rows="3" placeholder="답을 쓰세요">' + MD.esc(r.ans || '') + '</textarea>' +
         '<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap">' +
         '<button class="btn sm" data-act="pgrade">채점</button>' +
-        '<button class="btn sm ghost" data-act="pshow">모범답안</button>' +
         '<button class="btn sm ghost" data-act="pcopy">Claude 채점용 복사</button>' +
         '</div>' +
         '<div class="pracres"></div>' +
-        '<div class="pracans" hidden>' +
-          '<div class="md"><strong>모범답안</strong><br>' + MD.render(q.answer) + '</div>' +
+        '<details class="pracans">' +
+          '<summary>모범답안</summary>' +
+          '<div class="md" style="margin-top:10px">' +
+            MD.render(q.answer || '모범답안이 없습니다.') + '</div>' +
           (q.solution ? '<details open style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">풀이</summary>' +
                         '<div class="md small" style="margin-top:6px">' + MD.render(q.solution) + '</div></details>' : '') +
           (q.note ? '<div class="warn small" style="margin-top:8px">※ ' + MD.render(q.note) + '</div>' : '') +
-        '</div></div>';
+        '</details></div>';
     });
     view().innerHTML = h;
 
@@ -2125,11 +2126,7 @@
       var q = e.questions.filter(function (x) { return x.no === +card.dataset.no; })[0];
       var act = b.dataset.act;
       if (act === 'pgrade') { doGrade(e, q, true); pracSummary(e); }
-      else if (act === 'pshow') {
-        var box = card.querySelector('.pracans');
-        box.hidden = !box.hidden;
-        b.textContent = box.hidden ? '모범답안' : '모범답안 닫기';
-      } else if (act === 'pcopy') copyForClaude(e, q, card);
+      else if (act === 'pcopy') copyForClaude(e, q, card);
       else if (act === 'pself') {
         var qid = Practical.qidOf(e, q);
         Store.recordPrac(qid, { self: parseFloat(b.dataset.v) });

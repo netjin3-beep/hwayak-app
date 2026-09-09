@@ -671,6 +671,14 @@ main{
 .pracverdict > span:nth-child(2){flex:1 1 200px;min-width:0;overflow-wrap:anywhere}
 .pself{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:9px}
 .pracans{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)}
+.pracans > summary{
+  display:inline-flex; align-items:center; cursor:pointer; list-style:none;
+  padding:6px 10px; border:1px solid var(--line); border-radius:8px;
+  color:var(--accent2); font-size:13px; font-weight:650; user-select:none;
+}
+.pracans > summary::-webkit-details-marker{display:none}
+.pracans > summary::before{content:'＋'; margin-right:4px; font-weight:800}
+.pracans[open] > summary::before{content:'−'}
 .pracq .qstem{overflow-wrap:anywhere}
 
 /* ── 필기 / 실기 상단 탭 ── */
