@@ -2027,6 +2027,44 @@
     return (w.PRACTICAL || []).filter(function (e) { return e.level === level; });
   }
 
+  /** 실기 홈 — 필기 홈과 같은 진입 구조로 학습 순서를 안내한다. */
+  function viewPracticalHome() {
+    var P = w.PRACTICAL || [];
+    var total = P.reduce(function (n, e) { return n + e.questions.length; }, 0);
+    var theoryN = (w.PRACTICAL_THEORY || []).length;
+    var 기사N = pracExams('기사').length;
+    var 산기N = pracExams('산업기사').length;
+
+    var h = '<h2 class="page">실기 · 홈</h2>' +
+      '<p class="lead">필답형 이론과 기출문제를 순서대로 학습하고, 작업형 절차까지 확인하세요.</p>';
+
+    h += '<div class="grid g3">' +
+      tile('이론 단원', theoryN + '<span style="font-size:15px">개</span>', '필답형 기출 기반', 'dday') +
+      tile('기출 회차', P.length + '<span style="font-size:15px">회</span>', '기사 ' + 기사N + ' · 산업기사 ' + 산기N) +
+      tile('기출 문항', total + '<span style="font-size:15px">문항</span>', '답안·채점기준 연결') +
+      '</div>';
+
+    h += '<div class="card"><strong>실기 학습 순서</strong>' +
+      '<div class="list" style="margin-top:11px">' +
+      goItem('#/practical_theory', '📚', '1. 이론정리', '공식·계산법·핵심 개념을 먼저 정리합니다') +
+      goItem('#/practical', '📝', '2. 기출문제', '필답형 답안 작성과 자동채점·모범답안 확인') +
+      goItem('#/worktype', '🛠️', '3. 작업형', '작업형 과제와 안전·실격 포인트를 확인합니다') +
+      '</div></div>';
+
+    h += '<div class="grid g2">' +
+      '<div class="card"><strong>필답형 바로가기</strong><div class="list" style="margin-top:11px">' +
+      goItem('#/practical', '✍️', '필답형 기출문제', '기사·산업기사 회차별 문제') +
+      goItem('#/practical_theory', '📖', '실기 이론정리', theoryN + '개 단원 · 기출 기반 해설') +
+      '</div></div>' +
+      '<div class="card"><strong>학습 안내</strong>' +
+      '<div class="small muted" style="margin-top:11px;line-height:1.7">' +
+      '기출문제에서 답안을 작성한 뒤 <strong>채점</strong>을 누르고, 채점 옆의 <strong>모범답안</strong>과 <strong>풀이</strong>를 함께 확인하세요. ' +
+      '서술형 문항은 자동채점 결과를 참고한 뒤 모범답안을 보고 최종 판정을 기록할 수 있습니다.' +
+      '</div></div></div>';
+
+    view().innerHTML = h;
+  }
+
   /** 회차 목록 — 등급(기사/산업기사)별로 칸을 나눈다.
    *  같은 목록에 섞으면 기사 실력이 산업기사 성적에 가려진다. */
   function viewPractical() {
@@ -2035,7 +2073,7 @@
       view().innerHTML = '<div class="empty"><div class="ico">✍️</div>실기 문제 데이터가 없습니다.</div>';
       return;
     }
-    var h = '<h2 class="page">실기 · 필답형</h2>' +
+    var h = '<h2 class="page">실기 · 기출문제</h2>' +
       '<p class="lead">주관식으로 답을 쓰면 자동으로 채점합니다 · 최종 판정은 모범답안을 보고 본인이 정합니다</p>';
 
     Practical.LEVELS.forEach(function (lv) {
@@ -2234,9 +2272,10 @@
     w: [['#/home', '홈'], ['#/theory', '이론정리'], ['#/exams', '기출문제'],
         ['#/predict', '예상문제'], ['#/mock', '모의고사'],
         ['#/wrong', '오답노트'], ['#/stats', '통계']],
-    p: [['#/practical', '필답형'], ['#/practical_theory', '실기이론'], ['#/worktype', '작업형']]
+    p: [['#/practical_home', '홈'], ['#/practical_theory', '이론정리'],
+        ['#/practical', '기출문제'], ['#/worktype', '작업형']]
   };
-  var PRAC_ROUTES = { practical: 1, practical_theory: 1, worktype: 1 };
+  var PRAC_ROUTES = { practical_home: 1, practical: 1, practical_theory: 1, worktype: 1 };
 
   function modeOf(top) { return PRAC_ROUTES[top] ? 'p' : 'w'; }
 
@@ -2448,6 +2487,7 @@
 
     switch (parts[0]) {
       case 'home': viewHome(); break;
+      case 'practical_home': viewPracticalHome(); break;
       case 'theory': viewTheory(parts[1]); break;
       case 'practical_theory': viewPracticalTheory(parts[1]); break;
       case 'exams': parts[1] ? viewExamRound(parts[1]) : viewExams(); break;
