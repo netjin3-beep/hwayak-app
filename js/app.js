@@ -702,57 +702,183 @@
     return diff > 0 ? 'D-' + diff : diff === 0 ? 'D-DAY' : 'D+' + (-diff);
   }
 
-  /* ══════════════ 이론정리 ══════════════ */
-  function viewTheory(subjId) {
-    if (!THEORY.length) {
-      view().innerHTML = '<div class="empty"><div class="ico">📚</div>이론 데이터가 없습니다.<br>' +
-        '<span class="small">build_data.py 를 실행해 data/theory.js 를 생성하세요.</span></div>';
+  /* ══════════════ 이론정리 · 카드뉴스 리더 ══════════════ */
+  /** 긴 마크다운을 제목 단위의 한 장 카드로 나눈다. */
+  function theoryCardChunks(md) {
+    var lines = String(md || '').replace(/\r/g, '').split('\n');
+    var blocks = [], cur = [];
+    lines.forEach(function (line) {
+      if (/^#{2,3}\s+/.test(line) && cur.length && cur.join('\n').trim()) {
+        blocks.push(cur.join('\n').trim());
+        cur = [];
+      }
+      cur.push(line);
+    });
+    if (cur.join('\n').trim()) blocks.push(cur.join('\n').trim());
+
+    // ## 상위 제목만 단독으로 남는 경우에는 다음 ### 카드에 붙인다.
+    // 제목만 있는 빈 카드를 만들지 않아 카드뉴스 흐름이 자연스럽다.
+    var out = [];
+    for (var i = 0; i < blocks.length; i++) {
+      var onlyHeading = /^#{2,3}\s+[^\n]+\s*$/.test(blocks[i]);
+      if (onlyHeading && i + 1 < blocks.length) {
+        blocks[i + 1] = blocks[i] + '\n\n' + blocks[i + 1];
+      } else {
+        out.push(blocks[i]);
+      }
+    }
+    return out.length ? out : [String(md || '')];
+  }
+
+  function theoryCardTitle(md) {
+    var hs = String(md || '').split('\n').filter(function (line) {
+      return /^#{1,3}\s+/.test(line);
+    }).map(function (line) { return line.replace(/^#{1,3}\s+/, '').trim(); });
+    return hs.length ? hs[hs.length - 1] : '핵심 내용';
+  }
+
+  function theoryReader(items, subjId, cfg) {
+    if (!items.length) {
+      view().innerHTML = '<div class="empty"><div class="ico">📚</div>' + MD.esc(cfg.empty) + '<br>' +
+        '<span class="small">build_data.py 를 실행해 데이터를 생성하세요.</span></div>';
       return;
     }
-    var cur = THEORY.filter(function (t) { return t.id === subjId; })[0] || THEORY[0];
+    var cur = items.filter(function (t) { return t.id === subjId; })[0] || items[0];
+    var cards = theoryCardChunks(cur.md);
+    var p = cfg.prefix;
+    var state = { order: cards.map(function (_, i) { return i; }), pos: 0 };
 
-    var h = '<h2 class="page">이론 · 핵심정리</h2>' +
-      '<p class="lead">2026년 개편 출제기준 4과목 체계</p>' +
-      '<div class="split"><div class="side"><div class="card" style="padding:10px">';
-    THEORY.forEach(function (t) {
-      h += '<div class="sec' + (t.id === cur.id ? ' active' : '') + '" data-go="#/theory/' + t.id + '">' +
+    var h = '<h2 class="page">' + MD.esc(cfg.title) + '</h2>' +
+      '<p class="lead">' + MD.esc(cfg.lead) + '</p>' +
+      '<div class="split theory-layout"><div class="side"><div class="card" style="padding:10px">';
+    items.forEach(function (t) {
+      h += '<div class="sec' + (t.id === cur.id ? ' active' : '') + '" data-go="' + cfg.route + t.id + '">' +
         MD.esc(t.title) + '</div>';
       if (t.id === cur.id) {
         (t.toc || []).forEach(function (x) {
-          h += '<div class="toc" data-scroll="' + x.id + '">' + MD.esc(x.text) + '</div>';
+          var cardNo = cards.map(function (c, i) { return c.indexOf(x.text) >= 0 ? i : -1; })
+            .filter(function (i) { return i >= 0; })[0];
+          h += '<div class="toc" data-card="' + (cardNo == null ? 0 : cardNo) + '">' + MD.esc(x.text) + '</div>';
         });
       }
     });
-    h += '</div>';
-
-    h += '</div>';
-
-    h += '<div><div class="card"><div class="row" style="justify-content:space-between;margin-bottom:8px">' +
-      '<input type="search" id="thSearch" placeholder="이 단원에서 검색…" style="flex:1">' +
-      '<button class="btn sm" id="btnPrint">인쇄</button></div></div>' +
-      '<div class="card md" id="thBody">' + MD.render(cur.md) + '</div></div></div>';
-
+    h += '</div></div>';
+    h += '<div class="theory-reader">' +
+      '<div class="card theory-toolbar">' +
+      '<div class="theory-tools"><select id="' + p + 'CardSelect" aria-label="이론 카드 선택">';
+    cards.forEach(function (c, i) {
+      h += '<option value="' + i + '">' + (i + 1) + '. ' + MD.esc(theoryCardTitle(c)) + '</option>';
+    });
+    h += '</select><button class="btn sm" id="' + p + 'Print">인쇄</button></div>' +
+      '<div class="theory-progress-row"><span class="small muted" id="' + p + 'ProgressText">1 / ' + cards.length + ' 카드</span>' +
+      '<div class="theory-progress"><i id="' + p + 'ProgressBar"></i></div></div>' +
+      '<input type="search" id="' + p + 'Search" placeholder="카드에서 검색…" aria-label="이론 카드 검색">' +
+      '</div>' +
+      '<article class="card md theory-current" id="' + p + 'Body" tabindex="0"></article>' +
+      '<div class="theory-print-all md" id="' + p + 'PrintAll" aria-hidden="true"></div>' +
+      '<div class="theory-nav"><button class="btn" id="' + p + 'Prev">← 이전 카드</button>' +
+      '<button class="btn primary" id="' + p + 'Next">다음 카드 →</button></div>' +
+      '<div class="theory-help small muted">카드를 한 장씩 읽고, 아래 버튼 또는 좌우 넘김으로 계속하세요.</div>' +
+      '</div></div>';
     view().innerHTML = h;
+
+    var body = el(p + 'Body');
+    var select = el(p + 'CardSelect');
+    var search = el(p + 'Search');
+    var prev = el(p + 'Prev');
+    var next = el(p + 'Next');
+    var progressText = el(p + 'ProgressText');
+    var progressBar = el(p + 'ProgressBar');
+
+    function currentIndex() { return state.order[state.pos]; }
+    function refreshSelect() {
+      select.innerHTML = '';
+      state.order.forEach(function (actual, i) {
+        var opt = document.createElement('option');
+        opt.value = actual;
+        opt.textContent = (actual + 1) + '. ' + theoryCardTitle(cards[actual]);
+        select.appendChild(opt);
+      });
+      select.disabled = !state.order.length;
+    }
+    function paint() {
+      var actual = currentIndex();
+      if (actual == null) {
+        body.innerHTML = '<div class="empty"><div class="ico">🔎</div>검색 결과가 없습니다.</div>';
+        progressText.textContent = '0 / 0 카드';
+        progressBar.style.width = '0%';
+        prev.disabled = true; next.disabled = true;
+        return;
+      }
+      body.innerHTML = '<div class="theory-card-kicker"><span class="tag acc">카드 ' + (actual + 1) + ' / ' + cards.length + '</span>' +
+        '<span class="small muted">' + MD.esc(theoryCardTitle(cards[actual])) + '</span></div>' + MD.render(cards[actual]);
+      select.value = String(actual);
+      progressText.textContent = (state.pos + 1) + ' / ' + state.order.length + ' 카드';
+      progressBar.style.width = Math.round((state.pos + 1) / state.order.length * 100) + '%';
+      prev.disabled = state.pos <= 0;
+      next.disabled = state.pos >= state.order.length - 1;
+    }
+    function move(delta) {
+      var nextPos = state.pos + delta;
+      if (nextPos < 0 || nextPos >= state.order.length) return;
+      state.pos = nextPos;
+      paint();
+      body.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    function resetSearch() {
+      var q = search.value.trim().toLowerCase();
+      state.order = q ? cards.map(function (c, i) {
+        return String(c).toLowerCase().indexOf(q) >= 0 ? i : -1;
+      }).filter(function (i) { return i >= 0; }) : cards.map(function (_, i) { return i; });
+      state.pos = 0;
+      refreshSelect();
+      paint();
+    }
 
     view().querySelectorAll('[data-go]').forEach(function (n) {
       n.onclick = function () { location.hash = n.dataset.go; };
     });
-    view().querySelectorAll('[data-scroll]').forEach(function (n) {
+    view().querySelectorAll('[data-card]').forEach(function (n) {
       n.onclick = function () {
-        var t = document.getElementById(n.dataset.scroll);
-        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        search.value = '';
+        state.order = cards.map(function (_, i) { return i; });
+        state.pos = +n.dataset.card || 0;
+        refreshSelect(); paint();
+        body.scrollIntoView({ behavior: 'smooth', block: 'start' });
       };
     });
-    el('btnPrint').onclick = function () { window.print(); };
-    el('thSearch').oninput = function () {
-      var q = this.value.trim();
-      var body = el('thBody');
-      if (!q) { body.innerHTML = MD.render(cur.md); return; }
-      var re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
-      body.innerHTML = MD.render(cur.md).replace(/>([^<]+)</g, function (m, txt) {
-        return '>' + txt.replace(re, '<mark style="background:var(--mark);color:var(--fg);border-radius:3px;padding:0 2px">$1</mark>') + '<';
-      });
+    select.onchange = function () {
+      var actual = +this.value;
+      var at = state.order.indexOf(actual);
+      if (at >= 0) { state.pos = at; paint(); }
     };
+    search.oninput = resetSearch;
+    prev.onclick = function () { move(-1); };
+    next.onclick = function () { move(1); };
+    el(p + 'Print').onclick = function () {
+      el(p + 'PrintAll').innerHTML = cards.map(function (c) { return MD.render(c); }).join('<hr>');
+      window.print();
+    };
+
+    var touchX = null;
+    body.addEventListener('touchstart', function (e) {
+      touchX = e.changedTouches[0].clientX;
+    }, { passive: true });
+    body.addEventListener('touchend', function (e) {
+      if (touchX == null) return;
+      var dx = e.changedTouches[0].clientX - touchX;
+      touchX = null;
+      if (Math.abs(dx) >= 55) move(dx < 0 ? 1 : -1);
+    }, { passive: true });
+    refreshSelect();
+    paint();
+  }
+
+  function viewTheory(subjId) {
+    theoryReader(THEORY, subjId, {
+      title: '이론 · 핵심정리', lead: '2026년 개편 출제기준 4과목 체계',
+      route: '#/theory/', prefix: 'th', empty: '이론 데이터가 없습니다.'
+    });
   }
 
   /** 회차별 정답·해설·주의 집계 */
@@ -2365,54 +2491,10 @@
    * 필기 viewTheory와 동일한 split-view 구조.
    * 실기이론/*.md 에서 빌드한 PRACTICAL_THEORY 배열을 사용한다. */
   function viewPracticalTheory(subjId) {
-    if (!PRACTICAL_THEORY.length) {
-      view().innerHTML = '<div class="empty"><div class="ico">📚</div>실기 이론 데이터가 없습니다.<br>' +
-        '<span class="small">build_data.py 를 실행해 data/practical_theory.js 를 생성하세요.</span></div>';
-      return;
-    }
-    var cur = PRACTICAL_THEORY.filter(function (t) { return t.id === subjId; })[0] || PRACTICAL_THEORY[0];
-
-    var h = '<h2 class="page">실기 이론정리</h2>' +
-      '<p class="lead">필답형 기출 기반 이론 · 공식 · 계산법 정리</p>' +
-      '<div class="split"><div class="side"><div class="card" style="padding:10px">';
-    PRACTICAL_THEORY.forEach(function (t) {
-      h += '<div class="sec' + (t.id === cur.id ? ' active' : '') + '" data-go="#/practical_theory/' + t.id + '">' +
-        MD.esc(t.title) + '</div>';
-      if (t.id === cur.id) {
-        (t.toc || []).forEach(function (x) {
-          h += '<div class="toc" data-scroll="' + x.id + '">' + MD.esc(x.text) + '</div>';
-        });
-      }
+    theoryReader(PRACTICAL_THEORY, subjId, {
+      title: '실기 이론정리', lead: '필답형 기출 기반 이론 · 공식 · 계산법 정리',
+      route: '#/practical_theory/', prefix: 'pt', empty: '실기 이론 데이터가 없습니다.'
     });
-    h += '</div>';
-    h += '</div>';
-
-    h += '<div><div class="card"><div class="row" style="justify-content:space-between;margin-bottom:8px">' +
-      '<input type="search" id="ptSearch" placeholder="이 단원에서 검색…" style="flex:1">' +
-      '<button class="btn sm" id="btnPtPrint">인쇄</button></div></div>' +
-      '<div class="card md" id="ptBody">' + MD.render(cur.md) + '</div></div></div>';
-
-    view().innerHTML = h;
-
-    view().querySelectorAll('[data-go]').forEach(function (n) {
-      n.onclick = function () { location.hash = n.dataset.go; };
-    });
-    view().querySelectorAll('[data-scroll]').forEach(function (n) {
-      n.onclick = function () {
-        var t = document.getElementById(n.dataset.scroll);
-        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      };
-    });
-    el('btnPtPrint').onclick = function () { window.print(); };
-    el('ptSearch').oninput = function () {
-      var q = this.value.trim();
-      var body = el('ptBody');
-      if (!q) { body.innerHTML = MD.render(cur.md); return; }
-      var re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
-      body.innerHTML = MD.render(cur.md).replace(/>([^<]+)</g, function (m, txt) {
-        return '>' + txt.replace(re, '<mark style="background:var(--mark);color:var(--fg);border-radius:3px;padding:0 2px">$1</mark>') + '<';
-      });
-    };
   }
 
 
