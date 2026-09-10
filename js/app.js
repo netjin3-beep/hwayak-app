@@ -746,7 +746,7 @@
     var cur = items.filter(function (t) { return t.id === subjId; })[0] || items[0];
     var cards = theoryCardChunks(cur.md);
     var p = cfg.prefix;
-    var state = { order: cards.map(function (_, i) { return i; }), pos: 0 };
+    var state = { mode: 'normal', order: cards.map(function (_, i) { return i; }), pos: 0 };
 
     var h = '<h2 class="page">' + MD.esc(cfg.title) + '</h2>' +
       '<p class="lead">' + MD.esc(cfg.lead) + '</p>' +
@@ -758,18 +758,27 @@
         (t.toc || []).forEach(function (x) {
           var cardNo = cards.map(function (c, i) { return c.indexOf(x.text) >= 0 ? i : -1; })
             .filter(function (i) { return i >= 0; })[0];
-          h += '<div class="toc" data-card="' + (cardNo == null ? 0 : cardNo) + '">' + MD.esc(x.text) + '</div>';
+          h += '<div class="toc" data-card="' + (cardNo == null ? 0 : cardNo) + '" data-scroll="' + x.id + '">' + MD.esc(x.text) + '</div>';
         });
       }
     });
     h += '</div></div>';
-    h += '<div class="theory-reader">' +
+    h += '<div class="theory-reader" id="' + p + 'Reader">' +
+      '<div class="card theory-modebar"><strong>보기 방식</strong>' +
+      '<button class="btn sm theory-mode-btn active" id="' + p + 'ModeNormal">목록형</button>' +
+      '<button class="btn sm theory-mode-btn" id="' + p + 'ModeCards">카드뉴스</button></div>' +
+      '<div class="theory-normal" id="' + p + 'Normal">' +
+      '<div class="card"><div class="row" style="justify-content:space-between;margin-bottom:8px">' +
+      '<input type="search" id="' + p + 'NormalSearch" placeholder="이 단원에서 검색…" style="flex:1">' +
+      '<button class="btn sm" id="' + p + 'NormalPrint">인쇄</button></div></div>' +
+      '<div class="card md" id="' + p + 'NormalBody">' + MD.render(cur.md) + '</div></div>' +
+      '<div class="theory-cards" id="' + p + 'Cards" style="display:none">' +
       '<div class="card theory-toolbar">' +
       '<div class="theory-tools"><select id="' + p + 'CardSelect" aria-label="이론 카드 선택">';
     cards.forEach(function (c, i) {
       h += '<option value="' + i + '">' + (i + 1) + '. ' + MD.esc(theoryCardTitle(c)) + '</option>';
     });
-    h += '</select><button class="btn sm" id="' + p + 'Print">인쇄</button></div>' +
+    h += '</select><button class="btn sm" id="' + p + 'CardPrint">인쇄</button></div>' +
       '<div class="theory-progress-row"><span class="small muted" id="' + p + 'ProgressText">1 / ' + cards.length + ' 카드</span>' +
       '<div class="theory-progress"><i id="' + p + 'ProgressBar"></i></div></div>' +
       '<input type="search" id="' + p + 'Search" placeholder="카드에서 검색…" aria-label="이론 카드 검색">' +
@@ -779,9 +788,15 @@
       '<div class="theory-nav"><button class="btn" id="' + p + 'Prev">← 이전 카드</button>' +
       '<button class="btn primary" id="' + p + 'Next">다음 카드 →</button></div>' +
       '<div class="theory-help small muted">카드를 한 장씩 읽고, 아래 버튼 또는 좌우 넘김으로 계속하세요.</div>' +
-      '</div></div>';
+      '</div></div></div>';
     view().innerHTML = h;
 
+    var normal = el(p + 'Normal');
+    var cardsWrap = el(p + 'Cards');
+    var normalBody = el(p + 'NormalBody');
+    var normalSearch = el(p + 'NormalSearch');
+    var modeNormal = el(p + 'ModeNormal');
+    var modeCards = el(p + 'ModeCards');
     var body = el(p + 'Body');
     var select = el(p + 'CardSelect');
     var search = el(p + 'Search');
@@ -789,6 +804,26 @@
     var next = el(p + 'Next');
     var progressText = el(p + 'ProgressText');
     var progressBar = el(p + 'ProgressBar');
+
+    function renderNormal() {
+      var html = MD.render(cur.md);
+      var q = normalSearch.value.trim();
+      if (q) {
+        var re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+        html = html.replace(/>([^<]+)</g, function (m, txt) {
+          return '>' + txt.replace(re, '<mark style="background:var(--mark);color:var(--fg);border-radius:3px;padding:0 2px">$1</mark>') + '<';
+        });
+      }
+      normalBody.innerHTML = html;
+    }
+    function setMode(mode) {
+      state.mode = mode;
+      normal.style.display = mode === 'normal' ? '' : 'none';
+      cardsWrap.style.display = mode === 'cards' ? '' : 'none';
+      modeNormal.classList.toggle('active', mode === 'normal');
+      modeCards.classList.toggle('active', mode === 'cards');
+      view().dataset.theoryMode = mode;
+    }
 
     function currentIndex() { return state.order[state.pos]; }
     function refreshSelect() {
@@ -840,6 +875,11 @@
     });
     view().querySelectorAll('[data-card]').forEach(function (n) {
       n.onclick = function () {
+        if (state.mode === 'normal') {
+          var anchor = normalBody.querySelector('#' + n.dataset.scroll);
+          if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          return;
+        }
         search.value = '';
         state.order = cards.map(function (_, i) { return i; });
         state.pos = +n.dataset.card || 0;
@@ -852,10 +892,14 @@
       var at = state.order.indexOf(actual);
       if (at >= 0) { state.pos = at; paint(); }
     };
+    modeNormal.onclick = function () { setMode('normal'); };
+    modeCards.onclick = function () { setMode('cards'); };
+    normalSearch.oninput = renderNormal;
+    el(p + 'NormalPrint').onclick = function () { window.print(); };
     search.oninput = resetSearch;
     prev.onclick = function () { move(-1); };
     next.onclick = function () { move(1); };
-    el(p + 'Print').onclick = function () {
+    el(p + 'CardPrint').onclick = function () {
       el(p + 'PrintAll').innerHTML = cards.map(function (c) { return MD.render(c); }).join('<hr>');
       window.print();
     };
@@ -870,8 +914,10 @@
       touchX = null;
       if (Math.abs(dx) >= 55) move(dx < 0 ? 1 : -1);
     }, { passive: true });
+    renderNormal();
     refreshSelect();
     paint();
+    setMode('normal');
   }
 
   function viewTheory(subjId) {

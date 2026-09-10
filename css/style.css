@@ -239,6 +239,9 @@ p.lead{color:var(--dim); margin:0 0 20px; font-size:14px}
 
 /* ── 이론 카드뉴스 리더 ── */
 .theory-reader{min-width:0}
+.theory-modebar{display:flex;gap:8px;align-items:center;padding:10px 13px}
+.theory-modebar strong{font-size:13px;margin-right:2px}
+.theory-mode-btn.active{background:var(--accent);color:var(--onaccent);border-color:var(--accent)}
 .theory-toolbar{padding:13px 15px}
 .theory-tools{display:flex;gap:8px;align-items:center}
 .theory-tools select{flex:1;min-width:0}
@@ -285,9 +288,13 @@ label.chk{display:flex; gap:8px; align-items:center; cursor:pointer; font-size:1
   main{padding:18px 14px 90px}
 }
 @media print{
-  .topbar,.footbar,.side,.toast,.theory-toolbar,.theory-nav,.theory-help{display:none}
+  .topbar,.footbar,.side,.toast,.theory-modebar,.theory-toolbar,.theory-nav,.theory-help{display:none}
   .theory-current{display:none}
   .theory-print-all{display:block}
+  #view[data-theory-mode="normal"] .theory-cards{display:none !important}
+  #view[data-theory-mode="normal"] .theory-print-all{display:none !important}
+  #view[data-theory-mode="cards"] .theory-normal{display:none !important}
+  #view[data-theory-mode="cards"] .theory-print-all{display:block}
   body{background:#fff; color:#000}
   .card{border-color:#ccc}
 }
