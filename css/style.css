@@ -29,7 +29,7 @@
   --zebra:rgba(255,255,255,.017);
 }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0}
+html,body{margin:0;padding:0;max-width:100%;overflow-x:hidden}
 body{
   background:var(--bg); color:var(--fg);
   font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif;
@@ -55,7 +55,7 @@ a{color:var(--accent2); text-decoration:none}
 .nav a:hover{background:var(--panel2); color:var(--fg)}
 .nav a.active{background:var(--accent); color:var(--onaccent)}
 
-main{max-width:1080px; margin:0 auto; padding:26px 20px 90px}
+main{width:100%; max-width:1080px; min-width:0; margin:0 auto; padding:26px 20px 90px}
 
 /* ── 공통 ── */
 .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px; margin-bottom:16px}
@@ -210,6 +210,8 @@ p.lead{color:var(--dim); margin:0 0 20px; font-size:14px}
 
 /* 마크다운 본문 */
 .md{font-size:14.5px; line-height:1.78}
+.md{min-width:0; max-width:100%; overflow-wrap:anywhere}
+.md h1,.md h2,.md h3,.md h4{overflow-wrap:anywhere}
 .md h1{font-size:21px; margin:26px 0 10px; letter-spacing:-.4px; border-bottom:1px solid var(--line); padding-bottom:7px}
 .md h2{font-size:18px; margin:24px 0 9px; color:var(--accent2); letter-spacing:-.3px}
 .md h3{font-size:15.5px; margin:19px 0 7px; color:var(--fg)}
@@ -230,6 +232,7 @@ p.lead{color:var(--dim); margin:0 0 20px; font-size:14px}
 
 /* 사이드 레이아웃 */
 .split{display:grid; grid-template-columns:238px 1fr; gap:20px; align-items:start}
+.split > *{min-width:0}
 .side{position:sticky; top:78px; max-height:calc(100vh - 100px); overflow-y:auto}
 .side .sec{padding:9px 12px; border-radius:8px; cursor:pointer; font-size:13.5px; color:var(--dim); font-weight:600}
 .side .sec:hover{background:var(--panel2); color:var(--fg)}
@@ -239,7 +242,7 @@ p.lead{color:var(--dim); margin:0 0 20px; font-size:14px}
 
 /* ── 이론 카드뉴스 리더 ── */
 .theory-reader{min-width:0}
-.theory-modebar{display:flex;gap:8px;align-items:center;padding:10px 13px}
+.theory-modebar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 13px}
 .theory-modebar strong{font-size:13px;margin-right:2px}
 .theory-mode-btn.active{background:var(--accent);color:var(--onaccent);border-color:var(--accent)}
 .theory-toolbar{padding:13px 15px}
@@ -259,7 +262,7 @@ p.lead{color:var(--dim); margin:0 0 20px; font-size:14px}
 
 input[type=search],input[type=text],select{
   background:var(--panel2); border:1px solid var(--line); color:var(--fg);
-  padding:9px 13px; border-radius:9px; font-size:14px; font-family:inherit; outline:none;
+  min-width:0; max-width:100%; padding:9px 13px; border-radius:9px; font-size:14px; font-family:inherit; outline:none;
 }
 input[type=search]:focus,select:focus{border-color:var(--accent)}
 label.chk{display:flex; gap:8px; align-items:center; cursor:pointer; font-size:13.5px; color:var(--dim)}
@@ -356,6 +359,7 @@ label.chk{display:flex; gap:8px; align-items:center; cursor:pointer; font-size:1
 .matrix > .mbody{display:inline-flex; flex-direction:column; padding:0 .22em}
 .matrix .mrow{display:flex; justify-content:center}
 .matrix .mcell{padding:.12em .42em; text-align:center; white-space:nowrap}
+.md p:has(.matrix), .md li:has(.matrix){max-width:100%;overflow-x:auto}
 /* 행렬이 들어간 문단·표는 줄 간격을 넉넉히 */
 .md p:has(.matrix), .md li:has(.matrix){line-height:1.9}
 .qcond .matrix{margin-top:.2em}

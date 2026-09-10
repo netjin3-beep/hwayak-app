@@ -1,7 +1,9 @@
 /* 화약류관리기사 학습앱 — 오프라인 앱 껍데기 */
-var CACHE_NAME = 'hwayak-shell-v1';
+// 버전을 올리면 이미 설치된 아이폰의 오래된 JS/CSS 캐시도 함께 교체된다.
+var CACHE_NAME = 'hwayak-shell-v2';
 var SHELL = [
   './', './index.html', './manifest.webmanifest', './icon.svg',
+  './sw.js',
   './css/style.css', './supabase-config.js',
   './js/cloud.js', './js/store.js', './js/md.js',
   './js/practical.js', './js/quiz.js', './js/app.js'
@@ -42,17 +44,17 @@ self.addEventListener('fetch', function (event) {
     return;
   }
 
-  // 캐시된 파일은 쿼리 버전(?v=...)과 관계없이 재사용한다.
+  // 앱 화면 파일은 온라인이면 최신본을 먼저 받고, 오프라인일 때만 캐시를 쓴다.
+  // 예전에는 쿼리 버전이 달라도 오래된 JS를 먼저 돌려 변경사항이 안 보이는 문제가 있었다.
   event.respondWith(
-    caches.match(event.request, { ignoreSearch: true }).then(function (cached) {
-      if (cached) return cached;
-      return fetch(event.request).then(function (response) {
-        if (response && response.ok) {
-          var copy = response.clone();
-          caches.open(CACHE_NAME).then(function (cache) { cache.put(event.request, copy); });
-        }
-        return response;
-      });
+    fetch(event.request).then(function (response) {
+      if (response && response.ok) {
+        var copy = response.clone();
+        caches.open(CACHE_NAME).then(function (cache) { cache.put(event.request, copy); });
+      }
+      return response;
+    }).catch(function () {
+      return caches.match(event.request, { ignoreSearch: true });
     })
   );
 });
