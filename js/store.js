@@ -15,7 +15,17 @@
     progress: {},  // setKey -> {i, picked, qids, sess, shown, at, mode}  진행 중 풀이 자동저장
     attempts: {},  // setKey -> [{at, ok, n, pct}]  세트별 풀이 이력
     practical: {}, // qid -> {ans, auto, self, score, at}  실기 주관식 답안·채점 (객관식과 섞지 않는다)
-    settings: { examDate: '2026-08-23', examDatePractical: '2026-09-20', theme: 'light', reveal: 'instant', lastExportAt: 0 }
+    // 시험은 필기 → 실기 순이고, 실기는 필답형과 작업형의 날짜가 다르다.
+    //   examDate           필기      2026-08-23 (시행 완료)
+    //   examDatePractical  실기 필답형 2026-11-07
+    //   examDateWork       실기 작업형 2026-11-13 — 아직 미확정이라 examDateWorkTBD로 표시한다
+    settings: {
+      examDate: '2026-08-23',
+      examDatePractical: '2026-11-07',
+      examDateWork: '2026-11-13',
+      examDateWorkTBD: true,
+      theme: 'light', reveal: 'instant', lastExportAt: 0
+    }
   };
 
   var st;
@@ -27,6 +37,14 @@
   // 누락 키 보정
   Object.keys(def).forEach(function (k) { if (st[k] === undefined) st[k] = def[k]; });
   st.settings = Object.assign({}, def.settings, st.settings || {});
+  // 실기 시험일 정정. 옛 기본값을 그대로 쓰고 있던 기기에만 적용한다
+  // — 본인이 직접 고른 날짜는 건드리지 않는다.
+  //   2026-09-20(옛 단일 실기일) → 필답형 2026-11-07
+  if (st.settings.examDatePractical === '2026-09-20') st.settings.examDatePractical = '2026-11-07';
+  if (!st.settings.examDateWork) {
+    st.settings.examDateWork = def.settings.examDateWork;
+    st.settings.examDateWorkTBD = true;
+  }
 
   var lastSaveError = null;
   var muted = 0, dirty = false;   // 여러 문항을 한꺼번에 기록할 때 저장을 한 번으로 모은다

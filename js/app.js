@@ -477,8 +477,11 @@
       '<option value="click">「해설 보기」 눌러야 표시</option></select></label>' +
       '<label><span>필기 시험일</span>' +
       '<input type="date" id="setDate" value="' + st.settings.examDate + '"></label>' +
-      '<label><span>실기 시험일</span>' +
+      '<label><span>실기 필답형 시험일</span>' +
       '<input type="date" id="setDatePrac" value="' + (st.settings.examDatePractical || '') + '"></label>' +
+      '<label><span>실기 작업형 시험일' +
+      (st.settings.examDateWorkTBD ? ' <span class="small muted">(예상)</span>' : '') + '</span>' +
+      '<input type="date" id="setDateWork" value="' + (st.settings.examDateWork || '') + '"></label>' +
       '</div></div>';
 
     // 아이패드에서 한 번 저장해 두면 인터넷 없이도 문제·이론·해설을 사용할 수 있다.
@@ -581,7 +584,13 @@
     };
     el('setDatePrac').onchange = function () {
       st.settings.examDatePractical = this.value; Store.save();
-      toast('실기 시험일을 저장했습니다');
+      toast('필답형 시험일을 저장했습니다');
+    };
+    el('setDateWork').onchange = function () {
+      st.settings.examDateWork = this.value;
+      st.settings.examDateWorkTBD = false;   // 직접 고른 날짜는 더 이상 '예상'이 아니다
+      Store.save();
+      toast('작업형 시험일을 저장했습니다');
     };
 
     if (offlineCloud) {
@@ -703,12 +712,73 @@
   }
 
   /* ══════════════ 이론정리 · 카드뉴스 리더 ══════════════ */
-  /** 긴 마크다운을 제목 단위의 한 장 카드로 나눈다. */
+  /**
+   * 카드뉴스용 마크다운 분할.
+   * 제목(##~####)뿐 아니라 긴 문단과 표도 다시 나눠 한 장에 들어오는 양을 줄인다.
+   * 원문 자체는 건드리지 않고 카드 보기에서만 사용하는 조각을 만든다.
+   */
+  function splitLongTheoryBlock(block) {
+    var lines = String(block || '').split('\n');
+    if (lines.join('\n').length <= 620 && !/^\s*\|/.test(lines.join('\n'))) return [block];
+
+    var header = [], i = 0;
+    while (i < lines.length && /^#{1,4}\s+/.test(lines[i])) header.push(lines[i++]);
+    var units = [];
+    while (i < lines.length) {
+      while (i < lines.length && !lines[i].trim()) i++;
+      if (i >= lines.length) break;
+
+      // 긴 마크다운 표는 제목·헤더를 반복해 4행씩 나눈다.
+      if (/^\s*\|/.test(lines[i]) && i + 1 < lines.length && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1])) {
+        var table = [];
+        while (i < lines.length && /^\s*\|/.test(lines[i])) table.push(lines[i++]);
+        var tableHead = table.slice(0, 2);
+        var rows = table.slice(2);
+        if (rows.length > 4) {
+          for (var r = 0; r < rows.length; r += 4) {
+            units.push(tableHead.concat(rows.slice(r, r + 4)));
+          }
+        } else {
+          units.push(table);
+        }
+        continue;
+      }
+
+      var unit = [];
+      var math = false, fence = false;
+      while (i < lines.length) {
+        var line = lines[i];
+        if (/^\s*```/.test(line)) fence = !fence;
+        if (/\$\$/.test(line)) math = !math;
+        if (!line.trim() && !math && !fence) { i++; break; }
+        unit.push(line); i++;
+      }
+      if (unit.length) units.push(unit);
+    }
+
+    if (!units.length) return [block];
+    var result = [], current = header.slice();
+    function flush() {
+      var text = current.join('\n').trim();
+      if (text && text !== header.join('\n').trim()) result.push(text);
+      current = header.slice();
+    }
+    units.forEach(function (unit) {
+      var unitText = unit.join('\n').trim();
+      var currentText = current.join('\n').trim();
+      if (current.length > header.length && currentText.length + unitText.length + 2 > 620) flush();
+      current = current.concat(unit);
+      if (current.join('\n').trim().length > 760) flush();
+    });
+    flush();
+    return result.length ? result : [block];
+  }
+
   function theoryCardChunks(md) {
     var lines = String(md || '').replace(/\r/g, '').split('\n');
     var blocks = [], cur = [];
     lines.forEach(function (line) {
-      if (/^#{2,3}\s+/.test(line) && cur.length && cur.join('\n').trim()) {
+      if (/^#{2,4}\s+/.test(line) && cur.length && cur.join('\n').trim()) {
         blocks.push(cur.join('\n').trim());
         cur = [];
       }
@@ -717,27 +787,35 @@
     if (cur.join('\n').trim()) blocks.push(cur.join('\n').trim());
 
     // ## 상위 제목만 단독으로 남는 경우에는 다음 ### 카드에 붙인다.
-    // 제목만 있는 빈 카드를 만들지 않아 카드뉴스 흐름이 자연스럽다.
-    var out = [];
+    var merged = [];
     for (var i = 0; i < blocks.length; i++) {
-      var onlyHeading = /^#{2,3}\s+[^\n]+\s*$/.test(blocks[i]);
+      var onlyHeading = /^#{2,4}\s+[^\n]+\s*$/.test(blocks[i]);
       if (onlyHeading && i + 1 < blocks.length) {
         blocks[i + 1] = blocks[i] + '\n\n' + blocks[i + 1];
       } else {
-        out.push(blocks[i]);
+        merged.push(blocks[i]);
       }
     }
+    var out = [];
+    merged.forEach(function (block) {
+      splitLongTheoryBlock(block).forEach(function (part) { out.push(part); });
+    });
     return out.length ? out : [String(md || '')];
   }
 
   function theoryCardTitle(md) {
     var hs = String(md || '').split('\n').filter(function (line) {
-      return /^#{1,3}\s+/.test(line);
-    }).map(function (line) { return line.replace(/^#{1,3}\s+/, '').trim(); });
+      return /^#{1,4}\s+/.test(line);
+    }).map(function (line) { return line.replace(/^#{1,4}\s+/, '').trim(); });
     return hs.length ? hs[hs.length - 1] : '핵심 내용';
   }
 
+  function isTheorySummary(item) {
+    return item && (item.subject === '전과목' || /^0(?:_|-)/.test(String(item.id || '')));
+  }
+
   function theoryReader(items, subjId, cfg) {
+    document.body.classList.remove('reading-cards');
     if (!items.length) {
       view().innerHTML = '<div class="empty"><div class="ico">📚</div>' + MD.esc(cfg.empty) + '<br>' +
         '<span class="small">build_data.py 를 실행해 데이터를 생성하세요.</span></div>';
@@ -751,9 +829,17 @@
     var h = '<h2 class="page">' + MD.esc(cfg.title) + '</h2>' +
       '<p class="lead">' + MD.esc(cfg.lead) + '</p>' +
       '<div class="split theory-layout"><div class="side"><div class="card" style="padding:10px">';
+    var sawSubject = false;
     items.forEach(function (t) {
-      h += '<div class="sec' + (t.id === cur.id ? ' active' : '') + '" data-go="' + cfg.route + t.id + '">' +
-        MD.esc(t.title) + '</div>';
+      var summary = isTheorySummary(t);
+      if (summary && !sawSubject) h += '<div class="theory-group-title">📌 총정리</div>';
+      if (!summary && !sawSubject) {
+        h += '<div class="theory-group-title">과목별 이론</div>';
+        sawSubject = true;
+      }
+      h += '<div class="sec' + (t.id === cur.id ? ' active' : '') + (summary ? ' theory-summary' : '') +
+        '" data-go="' + cfg.route + t.id + '">' +
+        (summary ? '<span class="theory-summary-mark">총정리</span>' : '') + MD.esc(t.title) + '</div>';
       if (t.id === cur.id) {
         (t.toc || []).forEach(function (x) {
           var cardNo = cards.map(function (c, i) { return c.indexOf(x.text) >= 0 ? i : -1; })
@@ -773,23 +859,32 @@
       '<button class="btn sm" id="' + p + 'NormalPrint">인쇄</button></div></div>' +
       '<div class="card md" id="' + p + 'NormalBody">' + MD.render(cur.md) + '</div></div>' +
       '<div class="theory-cards" id="' + p + 'Cards" style="display:none">' +
-      '<div class="card theory-toolbar">' +
-      '<div class="theory-tools"><select id="' + p + 'CardSelect" aria-label="이론 카드 선택">';
-    cards.forEach(function (c, i) {
-      h += '<option value="' + i + '">' + (i + 1) + '. ' + MD.esc(theoryCardTitle(c)) + '</option>';
-    });
-    h += '</select><button class="btn sm" id="' + p + 'CardPrint">인쇄</button></div>' +
-      '<div class="theory-progress-row"><span class="small muted" id="' + p + 'ProgressText">1 / ' + cards.length + ' 카드</span>' +
-      '<div class="theory-progress"><i id="' + p + 'ProgressBar"></i></div></div>' +
-      '<input type="search" id="' + p + 'Search" placeholder="카드에서 검색…" aria-label="이론 카드 검색">' +
+      '<div class="card-reader-bar" id="' + p + 'CardBar">' +
+      '<button class="card-reader-menu" id="' + p + 'ListOpen" type="button">☰ 목록</button>' +
+      '<span class="card-reader-title" id="' + p + 'CardBarTitle">' + MD.esc(theoryCardTitle(cards[0])) + '</span>' +
+      '<span class="card-reader-progress" id="' + p + 'ProgressText">1 / ' + cards.length + '</span>' +
       '</div>' +
       '<article class="card md theory-current" id="' + p + 'Body" tabindex="0"></article>' +
-      '<div class="theory-print-all md" id="' + p + 'PrintAll" aria-hidden="true"></div>' +
-      '<div class="theory-nav"><button class="btn" id="' + p + 'Prev">← 이전 카드</button>' +
-      '<button class="btn primary" id="' + p + 'Next">다음 카드 →</button></div>' +
-      '<div class="theory-help small muted">카드를 한 장씩 읽고, 아래 버튼 또는 좌우 넘김으로 계속하세요.</div>' +
       '</div></div></div>';
     view().innerHTML = h;
+
+    // 카드 모드의 목록은 본문 위에 고정하지 않고, 상단 탭을 눌렀을 때만 서랍으로 연다.
+    var sideHtml = view().querySelector('.side').innerHTML;
+    var drawer = document.createElement('div');
+    drawer.className = 'theory-drawer';
+    drawer.id = p + 'Drawer';
+    drawer.innerHTML = '<div class="theory-drawer-backdrop" data-drawer-close></div>' +
+      '<div class="theory-drawer-panel" role="dialog" aria-label="이론 목록">' +
+      '<div class="theory-drawer-head"><strong>이론 목록</strong>' +
+      '<button class="card-reader-close" type="button" data-drawer-close aria-label="목록 닫기">×</button></div>' +
+      '<div class="theory-drawer-links"><a href="' + cfg.homeRoute + '">⌂ 홈</a>' +
+      '<a href="' + cfg.indexRoute + '">← 이론정리</a></div>' +
+      '<div class="theory-drawer-heading">단원 선택</div>' + sideHtml +
+      '<div class="theory-drawer-heading">현재 단원 카드</div>' +
+      '<div class="theory-drawer-cards">' + cards.map(function (c, i) {
+        return '<div class="toc" data-card="' + i + '">' + (i + 1) + '. ' + MD.esc(theoryCardTitle(c)) + '</div>';
+      }).join('') + '</div></div>';
+    view().appendChild(drawer);
 
     var normal = el(p + 'Normal');
     var cardsWrap = el(p + 'Cards');
@@ -798,12 +893,13 @@
     var modeNormal = el(p + 'ModeNormal');
     var modeCards = el(p + 'ModeCards');
     var body = el(p + 'Body');
-    var select = el(p + 'CardSelect');
-    var search = el(p + 'Search');
-    var prev = el(p + 'Prev');
-    var next = el(p + 'Next');
+    var cardBar = el(p + 'CardBar');
+    var cardBarTitle = el(p + 'CardBarTitle');
+    var listOpen = el(p + 'ListOpen');
     var progressText = el(p + 'ProgressText');
-    var progressBar = el(p + 'ProgressBar');
+    function focusCard() {
+      try { body.focus({ preventScroll: true }); } catch (e) { body.focus(); }
+    }
 
     function renderNormal() {
       var html = MD.render(cur.md);
@@ -823,51 +919,37 @@
       modeNormal.classList.toggle('active', mode === 'normal');
       modeCards.classList.toggle('active', mode === 'cards');
       view().dataset.theoryMode = mode;
+      if (mode === 'cards') {
+        document.body.classList.add('reading-cards');
+        drawer.classList.remove('open');
+        focusCard();
+      } else {
+        document.body.classList.remove('reading-cards');
+        drawer.classList.remove('open');
+      }
     }
 
     function currentIndex() { return state.order[state.pos]; }
-    function refreshSelect() {
-      select.innerHTML = '';
-      state.order.forEach(function (actual, i) {
-        var opt = document.createElement('option');
-        opt.value = actual;
-        opt.textContent = (actual + 1) + '. ' + theoryCardTitle(cards[actual]);
-        select.appendChild(opt);
-      });
-      select.disabled = !state.order.length;
-    }
     function paint() {
       var actual = currentIndex();
       if (actual == null) {
         body.innerHTML = '<div class="empty"><div class="ico">🔎</div>검색 결과가 없습니다.</div>';
         progressText.textContent = '0 / 0 카드';
-        progressBar.style.width = '0%';
-        prev.disabled = true; next.disabled = true;
+        cardBarTitle.textContent = '카드가 없습니다';
         return;
       }
       body.innerHTML = '<div class="theory-card-kicker"><span class="tag acc">카드 ' + (actual + 1) + ' / ' + cards.length + '</span>' +
         '<span class="small muted">' + MD.esc(theoryCardTitle(cards[actual])) + '</span></div>' + MD.render(cards[actual]);
-      select.value = String(actual);
-      progressText.textContent = (state.pos + 1) + ' / ' + state.order.length + ' 카드';
-      progressBar.style.width = Math.round((state.pos + 1) / state.order.length * 100) + '%';
-      prev.disabled = state.pos <= 0;
-      next.disabled = state.pos >= state.order.length - 1;
+      progressText.textContent = (state.pos + 1) + ' / ' + state.order.length;
+      cardBarTitle.textContent = theoryCardTitle(cards[actual]);
+      body.scrollTop = 0;
     }
     function move(delta) {
       var nextPos = state.pos + delta;
       if (nextPos < 0 || nextPos >= state.order.length) return;
       state.pos = nextPos;
       paint();
-      body.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-    function resetSearch() {
-      var q = search.value.trim().toLowerCase();
-      state.order = q ? cards.map(function (c, i) {
-        return String(c).toLowerCase().indexOf(q) >= 0 ? i : -1;
-      }).filter(function (i) { return i >= 0; }) : cards.map(function (_, i) { return i; });
-      state.pos = 0;
-      refreshSelect();
-      paint();
+      focusCard();
     }
 
     view().querySelectorAll('[data-go]').forEach(function (n) {
@@ -880,42 +962,53 @@
           if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
           return;
         }
-        search.value = '';
-        state.order = cards.map(function (_, i) { return i; });
-        state.pos = +n.dataset.card || 0;
-        refreshSelect(); paint();
-        body.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        var target = +n.dataset.card || 0;
+        var at = state.order.indexOf(target);
+        if (at >= 0) state.pos = at;
+        paint();
+        drawer.classList.remove('open');
       };
     });
-    select.onchange = function () {
-      var actual = +this.value;
-      var at = state.order.indexOf(actual);
-      if (at >= 0) { state.pos = at; paint(); }
-    };
     modeNormal.onclick = function () { setMode('normal'); };
     modeCards.onclick = function () { setMode('cards'); };
     normalSearch.oninput = renderNormal;
     el(p + 'NormalPrint').onclick = function () { window.print(); };
-    search.oninput = resetSearch;
-    prev.onclick = function () { move(-1); };
-    next.onclick = function () { move(1); };
-    el(p + 'CardPrint').onclick = function () {
-      el(p + 'PrintAll').innerHTML = cards.map(function (c) { return MD.render(c); }).join('<hr>');
-      window.print();
-    };
+    listOpen.onclick = function () { drawer.classList.add('open'); };
+    drawer.querySelectorAll('[data-drawer-close]').forEach(function (n) {
+      n.onclick = function () { drawer.classList.remove('open'); };
+    });
 
-    var touchX = null;
+    var touchX = null, touchY = null, touchHandled = false;
     body.addEventListener('touchstart', function (e) {
       touchX = e.changedTouches[0].clientX;
+      touchY = e.changedTouches[0].clientY;
     }, { passive: true });
     body.addEventListener('touchend', function (e) {
       if (touchX == null) return;
       var dx = e.changedTouches[0].clientX - touchX;
-      touchX = null;
-      if (Math.abs(dx) >= 55) move(dx < 0 ? 1 : -1);
+      var dy = e.changedTouches[0].clientY - touchY;
+      var x = e.changedTouches[0].clientX;
+      touchX = null; touchY = null;
+      if (Math.abs(dx) >= 45 && Math.abs(dx) > Math.abs(dy)) {
+        // 사용자가 요청한 방향: 왼쪽 스와이프=이전, 오른쪽 스와이프=다음.
+        move(dx < 0 ? -1 : 1);
+      } else if (Math.abs(dx) < 18 && Math.abs(dy) < 18) {
+        touchHandled = true;
+        move(x < window.innerWidth / 2 ? -1 : 1);
+        setTimeout(function () { touchHandled = false; }, 500);
+      }
     }, { passive: true });
+    body.addEventListener('click', function (e) {
+      if (touchHandled) return;
+      var node = e.target;
+      while (node && node !== body) {
+        if (/^(A|BUTTON|INPUT|SELECT|TEXTAREA)$/.test(node.tagName)) return;
+        node = node.parentNode;
+      }
+      var rect = body.getBoundingClientRect();
+      move(e.clientX - rect.left < rect.width / 2 ? -1 : 1);
+    });
     renderNormal();
-    refreshSelect();
     paint();
     setMode('normal');
   }
@@ -923,7 +1016,8 @@
   function viewTheory(subjId) {
     theoryReader(THEORY, subjId, {
       title: '이론 · 핵심정리', lead: '2026년 개편 출제기준 4과목 체계',
-      route: '#/theory/', prefix: 'th', empty: '이론 데이터가 없습니다.'
+      route: '#/theory/', indexRoute: '#/theory', homeRoute: '#/home',
+      prefix: 'th', empty: '이론 데이터가 없습니다.'
     });
   }
 
@@ -2492,23 +2586,41 @@
    * 새로고침이 모두 자연스럽게 맞아떨어진다. */
 
   var MENUS = {
-    w: [['#/home', '홈'], ['#/theory', '이론정리'], ['#/exams', '기출문제'],
-        ['#/predict', '예상문제'], ['#/mock', '모의고사'],
-        ['#/wrong', '오답노트'], ['#/stats', '통계']],
-    p: [['#/practical_home', '홈'], ['#/practical_theory', '이론정리'],
-        ['#/practical', '기출문제'], ['#/worktype', '작업형']]
+    w:         [['#/home', '홈'], ['#/theory', '이론정리'], ['#/exams', '기출문제'],
+                ['#/predict', '예상문제'], ['#/mock', '모의고사'],
+                ['#/wrong', '오답노트'], ['#/stats', '통계']],
+    p_written: [['#/practical_home', '홈'], ['#/practical_theory', '이론정리'],
+                ['#/practical', '기출문제']],
+    // 작업형은 화면이 하나뿐이라 아래 메뉴를 두지 않는다 — 상단 하위탭이 곧 이동수단이다.
+    p_work:    []
   };
   var PRAC_ROUTES = { practical_home: 1, practical: 1, practical_theory: 1, worktype: 1 };
+  var WORK_ROUTES = { worktype: 1 };
 
   function modeOf(top) { return PRAC_ROUTES[top] ? 'p' : 'w'; }
+  function subOf(top) { return WORK_ROUTES[top] ? 'work' : 'written'; }
+
+  /** 헤더에 띄울 시험일 — 지금 보고 있는 시험의 것만 보여준다. */
+  function examLabel(mode, sub) {
+    var st = Store.s.settings;
+    if (mode === 'w') return '필기 ' + st.examDate + ' · ' + dday(st.examDate);
+    if (sub === 'work') {
+      var d = st.examDateWork;
+      if (!d) return '작업형 · 날짜 미정';
+      return '작업형 ' + d + (st.examDateWorkTBD ? '(예상)' : '') + ' · ' + dday(d);
+    }
+    var p = st.examDatePractical;
+    return p ? '필답형 ' + p + ' · ' + dday(p) : '필답형 · 날짜 미정';
+  }
 
   function renderNav(top) {
-    var m = modeOf(top), nav = el('nav');
-    if (nav._m !== m) {
-      nav.innerHTML = MENUS[m].map(function (x) {
+    var m = modeOf(top), sub = subOf(top), nav = el('nav');
+    var key = (m === 'w') ? 'w' : ('p_' + sub);
+    if (nav._m !== key) {
+      nav.innerHTML = MENUS[key].map(function (x) {
         return '<a href="' + x[0] + '">' + x[1] + '</a>';
       }).join('') + '<button id="themeBtn" title="흰색/블랙 모드 전환">🌙</button>';
-      nav._m = m;
+      nav._m = key;
       var tb = el('themeBtn');
       if (tb) tb.onclick = function () {
         Store.setTheme(Store.s.settings.theme === 'dark' ? 'light' : 'dark');
@@ -2522,25 +2634,32 @@
     document.querySelectorAll('#modetab a').forEach(function (a) {
       a.classList.toggle('active', a.dataset.mode === m);
     });
-    var dd = el('dday');
-    if (dd) {
-      if (m === 'p') {
-        var pDate = Store.s.settings.examDatePractical;
-        dd.textContent = '실기 ' + (pDate || '날짜 미설정') + ' · ' + (pDate ? dday(pDate) : '-');
-      } else {
-        dd.textContent = Store.s.settings.examDate + ' 시행 · ' + dday();
-      }
+    var stab = el('subtab');
+    if (stab) {
+      stab.hidden = (m !== 'p');
+      stab.querySelectorAll('a').forEach(function (a) {
+        a.classList.toggle('active', a.dataset.sub === sub);
+      });
     }
+    var dd = el('dday');
+    if (dd) dd.textContent = examLabel(m, sub);
   }
 
   /* ───────── 실기 · 이론정리 ─────────
    * 필기 viewTheory와 동일한 split-view 구조.
    * 실기이론/*.md 에서 빌드한 PRACTICAL_THEORY 배열을 사용한다. */
   function viewPracticalTheory(subjId) {
-    theoryReader(PRACTICAL_THEORY, subjId, {
-      title: '실기 이론정리', lead: '필답형 기출 기반 이론 · 공식 · 계산법 정리',
-      route: '#/practical_theory/', prefix: 'pt', empty: '실기 이론 데이터가 없습니다.'
-    });
+    try {
+      theoryReader(PRACTICAL_THEORY, subjId, {
+        title: '실기 이론정리', lead: '필답형 기출 기반 이론 · 공식 · 계산법 정리',
+        route: '#/practical_theory/', indexRoute: '#/practical_theory', homeRoute: '#/practical_home',
+        prefix: 'pt', empty: '실기 이론 데이터가 없습니다.'
+      });
+    } catch (err) {
+      view().innerHTML = '<div class="empty"><div class="ico">⚠️</div>실기 이론 화면 오류: ' +
+        MD.esc(err && err.message ? err.message : String(err)) + '</div>';
+      throw err;
+    }
   }
 
 
@@ -2653,6 +2772,7 @@
 
   function route() {
     Quiz.stop();
+    document.body.classList.remove('reading-cards');
     // 화면을 옮길 때(특히 이어 풀기 직전) 다른 기기에서 푼 내용을 먼저 가져온다.
     // 짧은 간격의 연속 이동에서는 건너뛴다.
     if (w.CLOUD && w.CLOUD.enabled && Date.now() - lastSyncAt > 5000) {
@@ -2663,6 +2783,7 @@
     var parts = hash.split('/').map(decodeURIComponent);
 
     renderNav(parts[0]);
+    if (parts[0] === 'practical_theory') view().innerHTML = '<div class="empty">DEBUG ROUTE</div>';
 
     switch (parts[0]) {
       case 'home': viewHome(); break;

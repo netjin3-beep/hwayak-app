@@ -528,6 +528,108 @@ main{
   .qstem{font-size:16px}
 }
 
+/* ── 이론정리 구분·카드뉴스 학습 화면 ── */
+.theory-group-title{
+  margin:7px 8px 4px; padding:5px 8px; border-bottom:1px solid var(--line);
+  color:var(--dim2); font-size:11px; font-weight:800; letter-spacing:.3px;
+}
+.theory-group-title:first-child{margin-top:0}
+.side .sec.theory-summary{font-weight:800}
+.theory-summary-mark{
+  display:inline-block; margin-right:6px; padding:1px 6px; border-radius:99px;
+  background:var(--t-acc); color:var(--accent2); font-size:10px; font-weight:800;
+  vertical-align:1px;
+}
+.card-reader-bar{display:none}
+.theory-drawer{display:none}
+
+/* 카드뉴스를 선택했을 때만 앱 셸을 걷어내고 학습 카드가 화면을 전부 사용한다. */
+body.reading-cards{overflow:hidden}
+body.reading-cards .topbar,
+body.reading-cards .footbar{display:none !important}
+body.reading-cards main#view{
+  width:100%; max-width:none; height:100vh; height:100dvh; min-height:0;
+  margin:0; padding:0; overflow:hidden;
+}
+body.reading-cards .page,
+body.reading-cards .lead,
+body.reading-cards .side,
+body.reading-cards .theory-modebar,
+body.reading-cards .theory-toolbar,
+body.reading-cards .theory-nav,
+body.reading-cards .theory-help{display:none !important}
+body.reading-cards .theory-layout{display:block; height:100%; min-height:0}
+body.reading-cards .theory-reader{height:100%; width:100%; min-height:0}
+body.reading-cards .theory-normal{display:none !important}
+body.reading-cards .theory-cards{
+  display:block !important; height:100%; width:100%; margin:0; padding:0;
+}
+body.reading-cards .card-reader-bar{
+  display:flex; align-items:center; gap:9px; width:100%; height:58px;
+  padding:calc(8px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+  background:var(--topbar); border-bottom:1px solid var(--line); position:relative; z-index:2;
+}
+.card-reader-menu,.card-reader-close{
+  border:1px solid var(--line); background:var(--panel2); color:var(--fg);
+  border-radius:9px; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer;
+}
+.card-reader-menu{padding:7px 10px; flex:0 0 auto}
+.card-reader-close{width:34px; height:34px; font-size:24px; line-height:1}
+.card-reader-menu:hover,.card-reader-close:hover{border-color:var(--accent); color:var(--accent2)}
+.card-reader-title{
+  min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  color:var(--dim); font-size:13px; font-weight:700;
+}
+.card-reader-progress{font-size:12px; font-weight:800; color:var(--accent2); white-space:nowrap}
+body.reading-cards .theory-current{
+  height:calc(100% - 58px); min-height:0; margin:0; border:0; border-radius:0;
+  box-shadow:none; overflow-y:auto; overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch; padding:23px max(20px, 6vw) calc(30px + env(safe-area-inset-bottom));
+  -webkit-tap-highlight-color:transparent;
+}
+body.reading-cards .theory-current.md{
+  font-size:clamp(17px, 4.7vw, 23px); line-height:1.82; letter-spacing:-.15px;
+}
+body.reading-cards .theory-current.md h1{font-size:clamp(24px, 7vw, 34px); line-height:1.3; margin:4px 0 18px}
+body.reading-cards .theory-current.md h2{font-size:clamp(21px, 6vw, 29px); line-height:1.35; margin:5px 0 17px}
+body.reading-cards .theory-current.md h3{font-size:clamp(19px, 5.3vw, 26px); line-height:1.4; margin:5px 0 14px}
+body.reading-cards .theory-current.md h4{font-size:1.03em; margin:7px 0 10px}
+body.reading-cards .theory-current.md p{margin:11px 0}
+body.reading-cards .theory-current.md li{margin:7px 0}
+body.reading-cards .theory-current.md table{font-size:.76em; line-height:1.55; margin:12px 0}
+body.reading-cards .theory-current.md th,
+body.reading-cards .theory-current.md td{padding:7px 8px}
+body.reading-cards .theory-card-kicker{margin-bottom:14px}
+
+/* 카드 모드의 별도 목록 서랍 */
+.theory-drawer.open{
+  display:flex; position:fixed; inset:0; z-index:300; background:rgba(0,0,0,.42);
+}
+.theory-drawer-backdrop{position:absolute; inset:0}
+.theory-drawer-panel{
+  position:relative; z-index:1; width:min(380px, 88vw); height:100%; overflow-y:auto;
+  padding:calc(13px + env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom));
+  background:var(--panel); box-shadow:7px 0 24px rgba(0,0,0,.2);
+}
+.theory-drawer-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px}
+.theory-drawer-head strong{font-size:18px}
+.theory-drawer-links{display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-bottom:15px}
+.theory-drawer-links a{
+  display:flex; align-items:center; justify-content:center; padding:9px 8px;
+  border:1px solid var(--line); border-radius:9px; background:var(--panel2); font-size:13px; font-weight:700;
+}
+.theory-drawer-heading{margin:13px 5px 5px; color:var(--dim2); font-size:11px; font-weight:800}
+.theory-drawer-panel .card{padding:8px 0; margin:0; border:0; box-shadow:none}
+.theory-drawer-panel .sec{font-size:14px}
+.theory-drawer-panel .toc{padding-top:7px; padding-bottom:7px; font-size:13px}
+.theory-drawer-cards{border-left:1px solid var(--line); margin-left:11px}
+.theory-drawer-cards .toc{margin-left:0; padding-left:12px}
+
+@media (max-width:700px){
+  /* 일반 목록형은 기존처럼 유지하되, 좁은 화면에서 본문만 폭을 넘지 않게 한다. */
+  .theory-normal,.theory-normal .md{min-width:0; max-width:100%; overflow-wrap:anywhere}
+}
+
 /* iOS는 입력 글씨가 16px보다 작으면 포커스 시 화면을 확대해버린다 */
 @media (max-width:700px){
   input[type=search], input[type=text], select, textarea{font-size:16px}
@@ -655,7 +757,7 @@ main{
 .subjchip{
   display:inline-flex; align-items:baseline; gap:3px;
   font-size:11.5px; padding:2px 7px; border-radius:20px;
-  background:var(--panel2); border:1px solid var(--line); color:var(--muted);
+  background:var(--panel2); border:1px solid var(--line); color:var(--dim);
   white-space:nowrap;
 }
 .subjchip b{font-size:12.5px; color:var(--fg)}
@@ -699,9 +801,9 @@ main{
 .pracq textarea.pracin{width:100%;box-sizing:border-box;margin-top:10px;padding:10px 12px;
   border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);
   font:inherit;line-height:1.6;resize:vertical;min-height:70px}
-.pracq textarea.pracin:focus{outline:none;border-color:var(--acc)}
+.pracq textarea.pracin:focus{outline:none;border-color:var(--accent)}
 .pracverdict{display:flex;align-items:flex-start;gap:9px;flex-wrap:wrap;
-  margin-top:10px;padding:10px 12px;border-radius:8px;background:var(--bg2);line-height:1.55}
+  margin-top:10px;padding:10px 12px;border-radius:8px;background:var(--panel2);line-height:1.55}
 .pracverdict.ok{background:color-mix(in srgb,var(--ok) 12%,transparent)}
 .pracverdict.bad{background:color-mix(in srgb,var(--bad) 12%,transparent)}
 .pracverdict .pmark{font-weight:700;font-size:1.1rem;line-height:1.3;flex:none}
@@ -712,15 +814,23 @@ main{
 
 /* ── 필기 / 실기 상단 탭 ── */
 .modetab{display:flex;gap:2px;margin-left:14px;padding:3px;
-  background:var(--bg2);border-radius:9px;flex:none}
+  background:var(--panel2);border-radius:9px;flex:none}
 .modetab a{padding:5px 15px;border-radius:7px;font-size:13px;font-weight:600;
   color:var(--dim);text-decoration:none;white-space:nowrap;line-height:1.5}
 .modetab a:hover{color:var(--fg)}
-.modetab a.active{background:var(--card);color:var(--acc);
+.modetab a.active{background:var(--panel);color:var(--accent);
   box-shadow:0 1px 3px rgba(0,0,0,.10)}
+/* 실기 하위탭(필답형/작업형) — 상위탭과 한눈에 구분되도록 테두리형으로 둔다 */
+.modetab-sub{margin-left:7px;background:transparent;padding:2px;
+  border:1px solid var(--line);border-radius:9px}
+.modetab-sub a{padding:4px 12px;font-size:12.5px}
+.modetab-sub a.active{background:var(--accent);color:var(--onaccent);box-shadow:none}
+.modetab[hidden]{display:none}
 @media (max-width:520px){
   .modetab{margin-left:9px;padding:2px}
   .modetab a{padding:4px 11px;font-size:12px}
+  .modetab-sub{margin-left:5px}
+  .modetab-sub a{padding:4px 9px;font-size:11.5px}
 }
 
 /* ── 작업형 절차 체크리스트 ── */
@@ -728,8 +838,8 @@ main{
 .worksteps li{counter-increment:ws;margin:0 0 3px}
 .worksteps label{display:flex;align-items:flex-start;gap:9px;padding:6px 8px;
   border-radius:7px;cursor:pointer;line-height:1.6;font-size:14px}
-.worksteps label:hover{background:var(--bg2)}
-.worksteps input{margin:4px 0 0;flex:none;width:15px;height:15px;accent-color:var(--acc)}
+.worksteps label:hover{background:var(--panel2)}
+.worksteps input{margin:4px 0 0;flex:none;width:15px;height:15px;accent-color:var(--accent)}
 .worksteps label > span{flex:1;min-width:0;overflow-wrap:anywhere}
 .worksteps input:checked + span{color:var(--dim);text-decoration:line-through}
 .worksteps li::before{content:none}
