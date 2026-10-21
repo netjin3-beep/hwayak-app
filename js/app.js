@@ -2372,6 +2372,7 @@
       '<div class="card"><strong>필답형 바로가기</strong><div class="list" style="margin-top:11px">' +
       goItem('#/practical', '✍️', '필답형 기출문제', '기사·산업기사 회차별 문제') +
       goItem('#/practical_theory', '📖', '실기 이론정리', theoryN + '개 단원 · 기출 기반 해설') +
+      goItem('#/practical_search', '🔎', '이론·기출 통합검색', '키워드 하나로 이론 소제목과 기출 문항을 함께 찾기') +
       '</div></div>' +
       '<div class="card"><strong>학습 안내</strong>' +
       '<div class="small muted" style="margin-top:11px;line-height:1.7">' +
@@ -2490,7 +2491,18 @@
     });
     pracSummary(e);
 
-    view().addEventListener('click', function (ev) {
+    // 검색 결과에서 넘어왔으면 해당 문항으로 바로 내려간다
+    var jump = w.__pracJump;
+    if (jump && jump.kind === 'q' && jump.exam === e.id) {
+      w.__pracJump = null;
+      var target = view().querySelector('.pracq[data-no="' + jump.no + '"]');
+      if (target) setTimeout(function () { flashTo(target); }, 30);
+    }
+
+    // #view 요소는 화면이 바뀌어도 그대로 남는다. addEventListener 로 붙이면
+    // 회차를 옮길 때마다 이전 회차의 핸들러가 쌓여, 다른 회차 문항으로 채점이
+    // 기록될 수 있다. 그래서 속성 대입으로 매번 교체한다.
+    view().onclick = function (ev) {
       var b = ev.target.closest('[data-act]'); if (!b) return;
       var card = b.closest('.pracq'); if (!card) return;
       var q = e.questions.filter(function (x) { return x.no === +card.dataset.no; })[0];
@@ -2503,15 +2515,15 @@
         doGrade(e, q, false); pracSummary(e);
         toast('최종 판정을 기록했습니다');
       }
-    });
-    view().addEventListener('input', function (ev) {
+    };
+    view().oninput = function (ev) {
       if (!ev.target.classList.contains('pracin')) return;
       var card = ev.target.closest('.pracq');
       clearTimeout(card._t);
       card._t = setTimeout(function () {
         Store.recordPrac(card.dataset.qid, { ans: ev.target.value });
       }, 600);
-    });
+    };
   }
 
   function doGrade(e, q, save) {
@@ -2580,6 +2592,335 @@
   }
 
 
+  /* ───────── 실기 · 통합검색 ─────────
+   * 실기 이론정리(소제목 단위)와 필답형 기출(기사·산업기사 전 문항)을 한 화면에서 찾는다.
+   *  - 띄어쓰기 무시: '환산거리' 로 '환산 거리' 도 찾는다
+   *  - 여러 단어: 모두 들어간 것만 (예: '진동 입지상수')
+   *  - 수식(LaTeX)은 글자로 풀어서 찾는다: '\text{cm/s}' → 'cm/s'
+   * 기출은 모범답안·풀이까지 뒤지므로, 이론 키워드가 몇 회차에 나왔는지도 바로 보인다. */
+
+  var TEX_SYM = {
+    alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', Delta: 'Δ', theta: 'θ', lambda: 'λ',
+    mu: 'μ', nu: 'ν', pi: 'π', rho: 'ρ', sigma: 'σ', tau: 'τ', phi: 'φ', varphi: 'φ',
+    omega: 'ω', le: '≤', leq: '≤', ge: '≥', geq: '≥', times: '×', cdot: '·',
+    approx: '≈', circ: '°', degree: '°', pm: '±', infty: '∞', to: '→', rightarrow: '→'
+  };
+  /** 마크다운·LaTeX를 검색·발췌용 평문으로 */
+  function searchPlain(s) {
+    var t = String(s == null ? '' : s).normalize('NFC');
+    for (var i = 0; i < 3; i++) {   // 중첩(\frac{\sqrt{W}}{D})을 바깥까지 푼다
+      t = t.replace(/\\(?:text|mathrm|textbf|mathbf|boldsymbol|operatorname|mathit)\s*\{([^{}]*)\}/g, '$1')
+        .replace(/\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '($1)/($2)')
+        .replace(/\\sqrt\s*(?:\[([^\]]*)\])?\s*\{([^{}]*)\}/g, function (m, n, x) {
+          return (n || '') + '√(' + x + ')';
+        });
+    }
+    return t.replace(/\\(?:left|right|displaystyle|quad|qquad)\b/g, ' ')
+      .replace(/\\[,;! ]/g, ' ')
+      .replace(/\\([a-zA-Z]+)/g, function (m, n) { return TEX_SYM[n] || ' '; })
+      .replace(/^\s*\|?[\s:|-]+\|\s*$/gm, ' ')   // 표 구분선
+      .replace(/^\s*(?:-{3,}|\*{3,})\s*$/gm, ' ')   // 수평선
+      .replace(/^\s*[-*+]\s+/gm, '· ')               // 목록 기호
+      .replace(/[$`*#>{}\\_|]/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+  }
+  /** 비교용 키 — 대소문자·전각·띄어쓰기 무시 */
+  function sKey(s) { return String(s == null ? '' : s).normalize('NFKC').toLowerCase().replace(/\s+/g, ''); }
+  function reEsc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function countOcc(hay, nd) {
+    var n = 0, i = hay.indexOf(nd);
+    while (i >= 0 && n < 9) { n++; i = hay.indexOf(nd, i + nd.length); }
+    return n;
+  }
+
+  var pracIdx = null;
+  function pracSearchIndex() {
+    if (pracIdx && pracIdx.p === w.PRACTICAL && pracIdx.t === w.PRACTICAL_THEORY) return pracIdx.docs;
+    var docs = [];
+
+    // 이론: ##~#### 소제목 하나가 검색 단위
+    (w.PRACTICAL_THEORY || []).forEach(function (t) {
+      var path = [], cur = null, seen = {};
+      function push() {
+        if (!cur) return;
+        var body = searchPlain(cur.lines.join('\n'));
+        if (!body && !cur.head) return;
+        docs.push({
+          kind: 't', unit: t, head: cur.head, path: cur.path, anchor: cur.anchor, n: cur.n,
+          plain: body, kHead: sKey(cur.path.concat(cur.head).join(' ')), kBody: sKey(body)
+        });
+      }
+      String(t.md || '').split('\n').forEach(function (line) {
+        var h = line.match(/^(#{1,6})\s+(.*)$/);
+        if (h && h[1].length === 1) return;          // 문서 제목
+        if (h && h[1].length <= 4) {
+          push();
+          var lv = h[1].length, txt = searchPlain(h[2]);
+          var anc = path.slice(0, lv - 2);
+          // md.js 가 헤딩에 붙이는 id 와 같은 규칙 (같은 제목이 여러 번이면 몇 번째인지 기억)
+          var id = 'h_' + h[2].replace(/[^\w가-힣]/g, '').slice(0, 40);
+          seen[id] = (seen[id] || 0) + 1;
+          cur = { head: txt, path: anc, anchor: id, n: seen[id] - 1, lines: [] };
+          path = anc.concat([txt]);
+          return;
+        }
+        if (!cur) cur = { head: '', path: [], anchor: '', n: 0, lines: [] };
+        cur.lines.push(line);
+      });
+      push();
+    });
+
+    // 기출: 문항 하나가 검색 단위 (문제·모범답안·풀이·비고)
+    (w.PRACTICAL || []).forEach(function (e) {
+      e.questions.forEach(function (q) {
+        var f = {
+          stem: searchPlain(q.stem), answer: searchPlain(q.answer),
+          solution: searchPlain(q.solution), note: searchPlain(q.note)
+        };
+        docs.push({
+          kind: 'q', exam: e, q: q, f: f,
+          kHead: sKey((q.subject || '') + ' ' + f.stem),
+          kBody: sKey(f.answer + ' ' + f.solution + ' ' + f.note)
+        });
+      });
+    });
+
+    pracIdx = { p: w.PRACTICAL, t: w.PRACTICAL_THEORY, docs: docs };
+    return docs;
+  }
+
+  function pracSearchTerms(query) {
+    return String(query || '').trim().split(/\s+/).map(sKey).filter(Boolean);
+  }
+  function pracSearchRun(query) {
+    var terms = pracSearchTerms(query);
+    if (!terms.length) return [];
+    var whole = terms.join(''), out = [];
+    pracSearchIndex().forEach(function (d) {
+      var score = 0;
+      for (var i = 0; i < terms.length; i++) {
+        var inH = d.kHead.indexOf(terms[i]) >= 0, inB = d.kBody.indexOf(terms[i]) >= 0;
+        if (!inH && !inB) return;
+        score += (inH ? 6 : 0) + countOcc(d.kBody, terms[i]);
+      }
+      if (d.kind === 't' && sKey(d.head).indexOf(whole) >= 0) score += 12;
+      out.push({ d: d, score: score });
+    });
+    out.sort(function (a, b) {
+      return b.score - a.score ||
+        (a.d.kind === 'q' && b.d.kind === 'q' ? (b.d.exam.year - a.d.exam.year) || (a.d.q.no - b.d.q.no) : 0);
+    });
+    return out;
+  }
+
+  /** 띄어쓰기 없이 입력한 검색어를 원문(띄어쓰기 있음)에서 다시 찾는 정규식 */
+  function pracTermRe(terms) {
+    var parts = terms.slice().sort(function (a, b) { return b.length - a.length; })
+      .map(function (t) { return Array.from(t).map(reEsc).join('\\s*'); });
+    return new RegExp(parts.join('|'), 'gi');
+  }
+  function hlText(text, re) {
+    var h = '', last = 0, m;
+    re.lastIndex = 0;
+    while ((m = re.exec(text))) {
+      if (!m[0]) { re.lastIndex++; continue; }
+      h += MD.esc(text.slice(last, m.index)) + '<mark>' + MD.esc(m[0]) + '</mark>';
+      last = m.index + m[0].length;
+    }
+    return h + MD.esc(text.slice(last));
+  }
+  /** 첫 일치 위치 주변만 잘라 강조한다 */
+  function snippetHtml(text, re, len) {
+    text = text || ''; len = len || 150;
+    re.lastIndex = 0;
+    var m = re.exec(text), start = 0;
+    if (m && m.index > len / 3) {
+      start = m.index - Math.floor(len / 3);
+      var sp = text.lastIndexOf(' ', start);
+      if (sp >= 0 && sp > start - 15) start = sp + 1;
+    }
+    var seg = text.slice(start, start + len);
+    return (start > 0 ? '…' : '') + hlText(seg, re) + (start + len < text.length ? '…' : '');
+  }
+  function reHas(text, re) { re.lastIndex = 0; return re.test(text || ''); }
+
+  /** 이동 후 대상 위치로 스크롤하고 잠깐 테두리를 반짝인다 (상단바 높이만큼 여유) */
+  function flashTo(node) {
+    var top = node.getBoundingClientRect().top + window.pageYOffset - 90;
+    window.scrollTo(0, Math.max(0, top));
+    node.classList.remove('srch-flash');
+    void node.offsetWidth;
+    node.classList.add('srch-flash');
+  }
+
+  var PRAC_SUGGEST = ['환산거리', '입지상수', '최소저항선', '비장약량', '정체량', '도통시험',
+    '불발', '순폭', 'RQD', 'RMR', '전색', '디커플링', '지발당', '소음', '저장소', '프리스플리팅'];
+  var pracSearchFilter = 'all';
+
+  function viewPracticalSearch(initial) {
+    var docs = pracSearchIndex();
+    var nT = docs.filter(function (d) { return d.kind === 't'; }).length;
+    var nQ = docs.length - nT;
+
+    view().innerHTML = '<h2 class="page">실기 · 검색</h2>' +
+      '<p class="lead">이론정리 ' + nT + '개 소제목 + 필답형 기출 ' + nQ + '문항(모범답안·풀이 포함)을 한 번에 찾습니다</p>' +
+      '<div class="card srch-box">' +
+      '<input type="search" id="psQ" placeholder="예: 환산거리, 정체량, 도통시험, RQD" autocomplete="off" enterkeyhint="search">' +
+      '<div class="small muted" style="margin-top:7px">띄어쓰기는 무시합니다 · 여러 단어를 쓰면 모두 포함된 것만 보여줍니다</div>' +
+      '<div class="srch-filter" id="psF"></div></div>' +
+      '<div id="psR"></div>';
+
+    var inp = el('psQ'), box = el('psR'), fbox = el('psF');
+    var shown = { t: 15, q: 20 }, cur = { t: [], q: [] }, re = null, timer = null;
+    inp.value = initial || '';
+
+    function itemT(r, i) {
+      var d = r.d;
+      return '<div class="srch-hit" data-t="' + i + '">' +
+        '<div class="srch-meta"><span class="tag acc">이론</span>' +
+        '<span class="small muted">' + MD.esc(d.unit.title) + '</span></div>' +
+        '<div class="srch-title">' + hlText(d.path.concat(d.head || '(머리말)').join(' › '), re) + '</div>' +
+        (d.plain ? '<div class="srch-snip">' + snippetHtml(d.plain, re, 170) + '</div>' : '') +
+        '</div>';
+    }
+    function itemQ(r, i) {
+      var d = r.d, e = d.exam, q = d.q;
+      var extra = '';
+      [['answer', '모범답안'], ['solution', '풀이'], ['note', '비고']].some(function (x) {
+        if (!reHas(d.f[x[0]], re) || reHas(d.f.stem, re) && x[0] !== 'answer') return false;
+        extra = '<div class="srch-snip srch-sub"><span class="lbl">' + x[1] + '</span>' +
+          snippetHtml(d.f[x[0]], re, 130) + '</div>';
+        return true;
+      });
+      return '<div class="srch-hit" data-q="' + i + '">' +
+        '<div class="srch-meta"><span class="tag ' + (e.level === '기사' ? 'acc' : '') + '">' + e.level + '</span>' +
+        '<strong style="font-size:14px">' + MD.esc(e.label) + ' ' + q.no + '번</strong>' +
+        '<span class="small muted">' + MD.esc(q.subject || '') + ' · ' + MD.esc(q.type || '') + '</span></div>' +
+        '<div class="srch-snip">' + snippetHtml(d.f.stem, re, 170) + '</div>' + extra +
+        '<div class="row srch-act">' +
+        '<button class="btn sm ghost" data-a="ans">모범답안 보기</button>' +
+        '<button class="btn sm ghost" data-a="go">문제로 이동 →</button></div>' +
+        '<div class="srch-ans md" hidden></div></div>';
+    }
+
+    function paint() {
+      var q = inp.value.trim();
+      try {
+        history.replaceState(null, '', '#/practical_search' + (q ? '/' + encodeURIComponent(q) : ''));
+      } catch (err) {}
+
+      if (!q) {
+        fbox.innerHTML = '';
+        box.innerHTML = '<div class="card"><strong>자주 나오는 키워드</strong><div class="srch-chips">' +
+          PRAC_SUGGEST.filter(function (s) { return pracSearchRun(s).length; }).map(function (s) {
+            return '<button class="btn sm ghost" data-chip="' + MD.esc(s) + '">' + MD.esc(s) + '</button>';
+          }).join('') + '</div></div>';
+        return;
+      }
+
+      var terms = pracSearchTerms(q);
+      re = pracTermRe(terms);
+      var res = pracSearchRun(q);
+      cur.t = res.filter(function (r) { return r.d.kind === 't'; });
+      var qs = res.filter(function (r) { return r.d.kind === 'q'; });
+      var g = qs.filter(function (r) { return r.d.exam.level === '기사'; });
+      var s = qs.filter(function (r) { return r.d.exam.level !== '기사'; });
+
+      var F = [['all', '전체', cur.t.length + qs.length], ['t', '이론', cur.t.length],
+               ['g', '기사 기출', g.length], ['s', '산업기사 기출', s.length]];
+      fbox.innerHTML = F.map(function (f) {
+        return '<button class="btn sm' + (pracSearchFilter === f[0] ? '' : ' ghost') + '" data-f="' + f[0] + '">' +
+          f[1] + ' ' + f[2] + '</button>';
+      }).join('');
+
+      cur.q = pracSearchFilter === 'g' ? g : pracSearchFilter === 's' ? s : qs;
+      var showT = pracSearchFilter === 'all' || pracSearchFilter === 't';
+      var showQ = pracSearchFilter !== 't';
+
+      if (!res.length) {
+        box.innerHTML = '<div class="empty"><div class="ico">🔎</div>「' + MD.esc(q) + '」 검색 결과가 없습니다.' +
+          '<br><span class="small">단어를 줄이거나 다른 표현(예: 장약량 → 장약)으로 찾아보세요.</span></div>';
+        return;
+      }
+
+      // 출제 회차 요약 — 이 키워드가 언제 나왔는지 한눈에
+      var rounds = {};
+      qs.forEach(function (r) {
+        var k = r.d.exam.label.replace(/^(\d{4})년 제(\d)회$/, '$1-$2') + (r.d.exam.level === '기사' ? '' : '(산기)');
+        rounds[k] = (rounds[k] || 0) + 1;
+      });
+      var rk = Object.keys(rounds).sort().reverse();
+      var h = '<div class="srch-sum">「<strong>' + MD.esc(q) + '</strong>」 — 이론 ' + cur.t.length + '곳 · 기출 ' +
+        qs.length + '문항 (기사 ' + g.length + ' · 산업기사 ' + s.length + ')' +
+        (rk.length ? '<br>출제 회차: ' + rk.map(function (k) {
+          return k + (rounds[k] > 1 ? '×' + rounds[k] : '');
+        }).join(', ') : '') + '</div>';
+
+      if (showT && cur.t.length) {
+        h += '<h3 class="srch-group">📚 이론정리 <span class="small muted">' + cur.t.length + '</span></h3>';
+        h += cur.t.slice(0, shown.t).map(itemT).join('');
+        if (cur.t.length > shown.t) h += '<button class="btn sm ghost srch-more" data-more="t">이론 더 보기 (' + (cur.t.length - shown.t) + ')</button>';
+      }
+      if (showQ && cur.q.length) {
+        h += '<h3 class="srch-group">📝 기출문제 <span class="small muted">' + cur.q.length + '</span></h3>';
+        h += cur.q.slice(0, shown.q).map(itemQ).join('');
+        if (cur.q.length > shown.q) h += '<button class="btn sm ghost srch-more" data-more="q">기출 더 보기 (' + (cur.q.length - shown.q) + ')</button>';
+      }
+      if (showT && !cur.t.length && pracSearchFilter === 't') h += '<div class="empty">이론정리에는 결과가 없습니다.</div>';
+      if (showQ && !cur.q.length && pracSearchFilter !== 'all') h += '<div class="empty">이 등급 기출에는 결과가 없습니다.</div>';
+      box.innerHTML = h;
+    }
+
+    inp.oninput = function () {
+      clearTimeout(timer);
+      shown = { t: 15, q: 20 };
+      timer = setTimeout(paint, 180);
+    };
+    fbox.onclick = function (ev) {
+      var b = ev.target.closest('[data-f]'); if (!b) return;
+      pracSearchFilter = b.dataset.f; paint();
+    };
+    box.onclick = function (ev) {
+      var chip = ev.target.closest('[data-chip]');
+      if (chip) { inp.value = chip.dataset.chip; paint(); return; }
+      var more = ev.target.closest('[data-more]');
+      if (more) { shown[more.dataset.more] += 30; paint(); return; }
+
+      var hit = ev.target.closest('.srch-hit'); if (!hit) return;
+      if (hit.dataset.t != null) {
+        var d = cur.t[+hit.dataset.t].d;
+        w.__pracJump = { kind: 't', anchor: d.anchor, n: d.n,
+          term: inp.value.trim().split(/\s+/).sort(function (a, b) { return b.length - a.length; })[0] };
+        location.hash = '#/practical_theory/' + encodeURIComponent(d.unit.id);
+        return;
+      }
+      var r = cur.q[+hit.dataset.q]; if (!r) return;
+      var act = ev.target.closest('[data-a]');
+      if (act && act.dataset.a === 'go') {
+        w.__pracJump = { kind: 'q', exam: r.d.exam.id, no: r.d.q.no };
+        location.hash = '#/practical/' + encodeURIComponent(r.d.exam.id);
+        return;
+      }
+      if (ev.target.closest('.srch-ans')) return;   // 펼친 답안 안을 누를 땐 접지 않는다
+      var ans = hit.querySelector('.srch-ans'), btn = hit.querySelector('[data-a="ans"]');
+      if (ans.hasAttribute('hidden')) {
+        if (!ans.innerHTML) {
+          var qq = r.d.q;
+          ans.innerHTML = '<strong>모범답안</strong><br>' + MD.render(qq.answer || '모범답안이 없습니다.') +
+            (qq.solution ? '<div style="margin-top:8px"><strong>풀이</strong></div><div class="small">' + MD.render(qq.solution) + '</div>' : '') +
+            (qq.note ? '<div class="warn small" style="margin-top:8px">※ ' + MD.render(qq.note) + '</div>' : '');
+        }
+        ans.removeAttribute('hidden'); btn.textContent = '모범답안 닫기';
+      } else {
+        ans.setAttribute('hidden', ''); btn.textContent = '모범답안 보기';
+      }
+    };
+
+    paint();
+    if (!initial) try { inp.focus(); } catch (err) {}
+  }
+
+
   /* ───────── 필기 / 실기 모드 ─────────
    * 두 시험은 형식도 범위도 달라 한 메뉴에 섞으면 길만 잃는다.
    * 모드는 따로 저장하지 않고 현재 경로에서 끌어낸다 — 뒤로가기·북마크·
@@ -2590,11 +2931,11 @@
                 ['#/predict', '예상문제'], ['#/mock', '모의고사'],
                 ['#/wrong', '오답노트'], ['#/stats', '통계']],
     p_written: [['#/practical_home', '홈'], ['#/practical_theory', '이론정리'],
-                ['#/practical', '기출문제']],
+                ['#/practical', '기출문제'], ['#/practical_search', '🔎 검색']],
     // 작업형은 화면이 하나뿐이라 아래 메뉴를 두지 않는다 — 상단 하위탭이 곧 이동수단이다.
     p_work:    []
   };
-  var PRAC_ROUTES = { practical_home: 1, practical: 1, practical_theory: 1, worktype: 1 };
+  var PRAC_ROUTES = { practical_home: 1, practical: 1, practical_theory: 1, practical_search: 1, worktype: 1 };
   var WORK_ROUTES = { worktype: 1 };
 
   function modeOf(top) { return PRAC_ROUTES[top] ? 'p' : 'w'; }
@@ -2655,6 +2996,17 @@
         route: '#/practical_theory/', indexRoute: '#/practical_theory', homeRoute: '#/practical_home',
         prefix: 'pt', empty: '실기 이론 데이터가 없습니다.'
       });
+      // 검색 결과에서 넘어왔으면 검색어를 강조하고 해당 소제목으로 내려간다
+      var j = w.__pracJump;
+      if (j && j.kind === 't') {
+        w.__pracJump = null;
+        var s = el('ptNormalSearch');
+        if (s && j.term) { s.value = j.term; s.dispatchEvent(new Event('input')); }
+        var hits = Array.prototype.filter.call(
+          document.querySelectorAll('#ptNormalBody [id]'), function (x) { return x.id === j.anchor; });
+        var a = hits[j.n || 0] || hits[0];
+        if (a) setTimeout(function () { flashTo(a); }, 30);
+      }
     } catch (err) {
       view().innerHTML = '<div class="empty"><div class="ico">⚠️</div>실기 이론 화면 오류: ' +
         MD.esc(err && err.message ? err.message : String(err)) + '</div>';
@@ -2782,6 +3134,8 @@
     var hash = location.hash.replace(/^#\/?/, '') || 'home';
     var parts = hash.split('/').map(decodeURIComponent);
 
+    // 실기 회차 화면이 붙여둔 위임 핸들러를 다른 화면으로 끌고 가지 않는다
+    view().onclick = null; view().oninput = null;
     renderNav(parts[0]);
     if (parts[0] === 'practical_theory') view().innerHTML = '<div class="empty">DEBUG ROUTE</div>';
 
@@ -2795,6 +3149,7 @@
       case 'mock': viewMock(); break;
       case 'wrong': viewWrong(parts[1]); break;
       case 'practical': parts[1] ? viewPracticalRound(parts[1]) : viewPractical(); break;
+      case 'practical_search': viewPracticalSearch(parts[1] || ''); break;
       case 'worktype': viewWorktype(); break;
       case 'stats': viewStats(); break;
       case 'session': viewSession(parts[1]); break;
