@@ -3186,7 +3186,7 @@
       '<a class="btn sm" href="#/worktype_exams">← 회차 목록</a></div>' +
       '<p class="lead">' + MD.esc(e.src || '') + '</p>' +
       '<div class="row" style="gap:8px;margin-bottom:12px">' +
-      '<button class="btn sm ghost" data-act="wkall">전체 펼치기</button>' +
+      '<button class="btn sm ghost" data-act="wkall">전체 접기</button>' +
       '<span class="small muted" id="wkSum"></span></div>';
 
     e.questions.forEach(function (q) {
@@ -3199,11 +3199,11 @@
           return '<div style="margin:8px 0"><img src="' + src + '" alt="문제 그림" style="max-width:100%;border-radius:8px"></div>';
         }).join('') +
         '<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">' +
-        '<button class="btn sm" data-act="wkshow">답안 보기</button>' +
+        '<button class="btn sm" data-act="wkshow">답안 닫기</button>' +
         '<label class="small" style="display:flex;gap:6px;align-items:center;cursor:pointer">' +
         '<input type="checkbox" data-wk="' + MD.esc(k) + '"' + (Store.s.theoryRead[k] ? ' checked' : '') + '> 외웠음</label>' +
         '</div>' +
-        '<div class="workans" hidden style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)">' +
+        '<div class="workans" style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)">' +
           (q.method ? '<div class="md"><strong>작업방법</strong>' + MD.render(q.method) + '</div>' : '') +
           (q.answer ? '<div class="md" style="margin-top:8px"><strong>답</strong><br>' + MD.render(q.answer) + '</div>' : '') +
           (q.expl ? '<details open style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">설명</summary>' +
