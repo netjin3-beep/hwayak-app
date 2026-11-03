@@ -2932,11 +2932,11 @@
                 ['#/wrong', '오답노트'], ['#/stats', '통계']],
     p_written: [['#/practical_home', '홈'], ['#/practical_theory', '이론정리'],
                 ['#/practical', '기출문제'], ['#/practical_search', '🔎 검색']],
-    // 작업형은 화면이 하나뿐이라 아래 메뉴를 두지 않는다 — 상단 하위탭이 곧 이동수단이다.
-    p_work:    []
+    // 작업형: 절차 암기표(홈)와 스캔 판독한 기출문제
+    p_work:    [['#/worktype', '홈'], ['#/worktype_exams', '기출문제']]
   };
-  var PRAC_ROUTES = { practical_home: 1, practical: 1, practical_theory: 1, practical_search: 1, worktype: 1 };
-  var WORK_ROUTES = { worktype: 1 };
+  var PRAC_ROUTES = { practical_home: 1, practical: 1, practical_theory: 1, practical_search: 1, worktype: 1, worktype_exams: 1 };
+  var WORK_ROUTES = { worktype: 1, worktype_exams: 1 };
 
   function modeOf(top) { return PRAC_ROUTES[top] ? 'p' : 'w'; }
   function subOf(top) { return WORK_ROUTES[top] ? 'work' : 'written'; }
@@ -3074,6 +3074,13 @@
       '화약류취급(각종 시험포함) 및 발파작업을 실시하고 질문에 답하시오” 한 줄뿐입니다. ' +
       '실제 과제는 시험장에서 구두로 지시되므로, 아래는 문제은행이 아니라 <b>절차 암기표</b>입니다.</span></div>';
 
+    var WN = w.WORKTYPE || [];
+    var wq = WN.reduce(function (n, e) { return n + e.questions.length; }, 0);
+    h += '<a class="item" href="#/worktype_exams" style="margin-bottom:16px">' +
+      '<div><strong>📝 작업형 기출문제</strong><div class="small muted" style="margin-top:3px">' +
+      (WN.length ? WN.length + '개 회차 · ' + wq + '문항 — 시험위원 지시와 작업방법' : '프린트물을 스캔해 넣으면 여기에 쌓입니다') +
+      '</div></div><div class="right">→</div></a>';
+
     h += '<div class="grid g2">';
     WORK_TASKS.forEach(function (t, ti) {
       h += '<div class="card"><div class="row" style="justify-content:space-between;align-items:baseline">' +
@@ -3113,13 +3120,130 @@
 
     view().innerHTML = h;
 
-    view().addEventListener('change', function (ev) {
+    view().onchange = function (ev) {
       var c = ev.target;
       if (!c.dataset || !c.dataset.wt) return;
       if (c.checked) Store.s.theoryRead[c.dataset.wt] = 1;
       else delete Store.s.theoryRead[c.dataset.wt];
       Store.save();
+    };
+  }
+
+  /* ───────── 실기 · 작업형 기출 ─────────
+   * 작업형/*.md (프린트물 스캔 판독) → WORKTYPE.
+   * 자동채점 대상이 아니라, 지시를 읽고 절차를 떠올린 뒤 작업방법을 펼쳐 확인한다.
+   * '외웠음' 표시는 절차 체크리스트와 같은 theoryRead에 둬서 기기 간 동기화를 그대로 탄다. */
+  var WORK_TASK_ORDER = ['발파설계', '모의발파', '진동소음계측', '천공작업', '발파작업', '소음및진동측정작업', '기타'];
+  function workKey(e, q) { return 'wk:' + e.id + '#' + q.no; }
+  function workDone(e) {
+    return e.questions.filter(function (q) { return Store.s.theoryRead[workKey(e, q)]; }).length;
+  }
+
+  function viewWorkExams() {
+    var W = w.WORKTYPE || [];
+    var h = '<h2 class="page">작업형 · 기출문제</h2>' +
+      '<p class="lead">시험위원 지시를 읽고 절차를 먼저 떠올린 뒤, 작업방법을 펼쳐 확인하세요.</p>';
+    if (!W.length) {
+      view().innerHTML = h + '<div class="empty"><div class="ico">📷</div>' +
+        '아직 입력된 작업형 기출이 없습니다.<br>' +
+        '<span class="small muted">iPhone 메모앱 문서 스캔으로 찍은 PDF를 <b>작업형/</b> 폴더에 넣고 ' +
+        'Claude에게 판독을 요청하면 이 목록에 회차가 생깁니다.</span></div>';
+      return;
+    }
+    // 과제별 문항 수 요약
+    var cnt = {};
+    W.forEach(function (e) { e.questions.forEach(function (q) { cnt[q.task] = (cnt[q.task] || 0) + 1; }); });
+    h += '<div class="row" style="flex-wrap:wrap;gap:6px;margin-bottom:14px">' +
+      WORK_TASK_ORDER.filter(function (t) { return cnt[t]; }).map(function (t) {
+        return '<span class="tag">' + t + ' ' + cnt[t] + '</span>';
+      }).join('') + '</div>';
+
+    ['기사', '산업기사'].forEach(function (lv) {
+      var arr = W.filter(function (e) { return e.level === lv; });
+      if (!arr.length) return;
+      h += '<h3 style="margin:18px 0 8px">' + lv + '</h3><div class="grid g2">';
+      arr.forEach(function (e) {
+        var d = workDone(e), n = e.questions.length;
+        h += '<a class="item" href="#/worktype_exams/' + encodeURIComponent(e.id) + '">' +
+          '<div><strong>' + MD.esc(e.label) + '</strong>' +
+          '<div class="small muted" style="margin-top:3px">' + n + '문항 · ' + MD.esc(e.src || '') + '</div></div>' +
+          '<div class="right">' + (d
+            ? '<span class="tag ' + (d === n ? 'ok' : '') + '">' + d + '/' + n + '</span>'
+            : '<span class="small muted">시작 전</span>') + '</div></a>';
+      });
+      h += '</div>';
     });
+    view().innerHTML = h;
+  }
+
+  function viewWorkRound(id) {
+    var e = (w.WORKTYPE || []).filter(function (x) { return x.id === id; })[0];
+    if (!e) { location.hash = '#/worktype_exams'; return; }
+
+    var h = '<div class="row" style="justify-content:space-between;align-items:center">' +
+      '<h2 class="page" style="margin:0">' + MD.esc(e.label) +
+      ' <span class="tag ' + (e.level === '기사' ? 'acc' : '') + '">' + e.level + ' · 작업형</span></h2>' +
+      '<a class="btn sm" href="#/worktype_exams">← 회차 목록</a></div>' +
+      '<p class="lead">' + MD.esc(e.src || '') + '</p>' +
+      '<div class="row" style="gap:8px;margin-bottom:12px">' +
+      '<button class="btn sm ghost" data-act="wkall">전체 펼치기</button>' +
+      '<span class="small muted" id="wkSum"></span></div>';
+
+    e.questions.forEach(function (q) {
+      var k = workKey(e, q);
+      h += '<div class="card workq" style="margin-bottom:12px">' +
+        '<div class="row" style="justify-content:space-between;align-items:baseline">' +
+        '<strong>' + q.no + '번</strong><span class="tag">' + MD.esc(q.task) + '</span></div>' +
+        '<div class="md qstem" style="margin:8px 0 4px">' + MD.render(q.stem) + '</div>' +
+        (q.imgs || []).map(function (src) {
+          return '<div style="margin:8px 0"><img src="' + src + '" alt="문제 그림" style="max-width:100%;border-radius:8px"></div>';
+        }).join('') +
+        '<div class="row" style="gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center">' +
+        '<button class="btn sm" data-act="wkshow">답안 보기</button>' +
+        '<label class="small" style="display:flex;gap:6px;align-items:center;cursor:pointer">' +
+        '<input type="checkbox" data-wk="' + MD.esc(k) + '"' + (Store.s.theoryRead[k] ? ' checked' : '') + '> 외웠음</label>' +
+        '</div>' +
+        '<div class="workans" hidden style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)">' +
+          (q.method ? '<div class="md"><strong>작업방법</strong>' + MD.render(q.method) + '</div>' : '') +
+          (q.answer ? '<div class="md" style="margin-top:8px"><strong>답</strong><br>' + MD.render(q.answer) + '</div>' : '') +
+          (q.expl ? '<details open style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">설명</summary>' +
+                    '<div class="md small" style="margin-top:6px">' + MD.render(q.expl) + '</div></details>' : '') +
+          (q.note ? '<div class="warn small" style="margin-top:8px">※ ' + MD.render(q.note) + '</div>' : '') +
+        '</div></div>';
+    });
+    view().innerHTML = h;
+
+    function sum() {
+      var s = el('wkSum');
+      if (s) s.textContent = '외웠음 ' + workDone(e) + ' / ' + e.questions.length + '문항';
+    }
+    sum();
+
+    function toggle(card, show) {
+      var box = card.querySelector('.workans'), b = card.querySelector('[data-act="wkshow"]');
+      if (show) box.removeAttribute('hidden'); else box.setAttribute('hidden', '');
+      b.textContent = show ? '답안 닫기' : '답안 보기';
+    }
+    view().onclick = function (ev) {
+      var b = ev.target.closest && ev.target.closest('[data-act]');
+      if (!b) return;
+      if (b.dataset.act === 'wkshow') {
+        var c = b.closest('.workq');
+        toggle(c, c.querySelector('.workans').hasAttribute('hidden'));
+      } else if (b.dataset.act === 'wkall') {
+        var open = b.textContent === '전체 펼치기';
+        view().querySelectorAll('.workq').forEach(function (c) { toggle(c, open); });
+        b.textContent = open ? '전체 접기' : '전체 펼치기';
+      }
+    };
+    view().onchange = function (ev) {
+      var c = ev.target;
+      if (!c.dataset || !c.dataset.wk) return;
+      if (c.checked) Store.s.theoryRead[c.dataset.wk] = 1;
+      else delete Store.s.theoryRead[c.dataset.wk];
+      Store.save();
+      sum();
+    };
   }
 
   function route() {
@@ -3135,7 +3259,7 @@
     var parts = hash.split('/').map(decodeURIComponent);
 
     // 실기 회차 화면이 붙여둔 위임 핸들러를 다른 화면으로 끌고 가지 않는다
-    view().onclick = null; view().oninput = null;
+    view().onclick = null; view().oninput = null; view().onchange = null;
     renderNav(parts[0]);
     if (parts[0] === 'practical_theory') view().innerHTML = '<div class="empty">DEBUG ROUTE</div>';
 
@@ -3151,6 +3275,7 @@
       case 'practical': parts[1] ? viewPracticalRound(parts[1]) : viewPractical(); break;
       case 'practical_search': viewPracticalSearch(parts[1] || ''); break;
       case 'worktype': viewWorktype(); break;
+      case 'worktype_exams': parts[1] ? viewWorkRound(parts[1]) : viewWorkExams(); break;
       case 'stats': viewStats(); break;
       case 'session': viewSession(parts[1]); break;
       default: location.hash = '#/home';

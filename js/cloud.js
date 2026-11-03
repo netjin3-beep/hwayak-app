@@ -113,7 +113,8 @@
   var DATASETS = [
     ['exams', 'EXAMS'], ['answers', 'ANSWERS'], ['images', 'IMAGES'],
     ['keywords', 'KEYWORDS'], ['theory', 'THEORY'], ['predicted', 'PREDICTED'],
-    ['practical', 'PRACTICAL'], ['practical_theory', 'PRACTICAL_THEORY']
+    ['practical', 'PRACTICAL'], ['practical_theory', 'PRACTICAL_THEORY'],
+    ['worktype', 'WORKTYPE']
   ];
 
   /* ── 아이패드 오프라인 콘텐츠 보관 ──
