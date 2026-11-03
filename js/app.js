@@ -3180,7 +3180,16 @@
     var e = (w.WORKTYPE || []).filter(function (x) { return x.id === id; })[0];
     if (!e) { location.hash = '#/worktype_exams'; return; }
 
-    var h = '<div class="row" style="justify-content:space-between;align-items:center">' +
+    // 회차 바로가기 — 목록으로 나가지 않고 위에서 바로 옮겨 다닌다
+    var h = '<nav class="worknav" id="workNav">' + (w.WORKTYPE || []).map(function (x) {
+        var parts = String(x.label).split(' · ');
+        var inner = parts.length > 1
+          ? '<b>' + MD.esc(parts[0]) + '</b>' + MD.esc(parts.slice(1).join(' · '))
+          : '<b>' + MD.esc(x.label) + '</b>';
+        return '<a href="#/worktype_exams/' + encodeURIComponent(x.id) + '"' +
+          (x.id === e.id ? ' class="active" aria-current="page"' : '') + '>' + inner + '</a>';
+      }).join('') + '</nav>' +
+      '<div class="row" style="justify-content:space-between;align-items:center">' +
       '<h2 class="page" style="margin:0">' + MD.esc(e.label) +
       ' <span class="tag ' + (e.level === '기사' ? 'acc' : '') + '">' + e.level + ' · 작업형</span></h2>' +
       '<a class="btn sm" href="#/worktype_exams">← 회차 목록</a></div>' +
@@ -3212,6 +3221,15 @@
         '</div></div>';
     });
     view().innerHTML = h;
+    window.scrollTo(0, 0);
+
+    // 상단 바(높이가 화면 폭마다 다름) 바로 아래에 붙도록 위치를 맞추고, 현재 회차를 보이게 스크롤
+    var nav = el('workNav'), tb = document.querySelector('.topbar');
+    if (nav) {
+      if (tb) nav.style.top = tb.offsetHeight + 'px';
+      var act = nav.querySelector('a.active');
+      if (act) nav.scrollLeft = Math.max(0, act.offsetLeft - 16);
+    }
 
     function sum() {
       var s = el('wkSum');

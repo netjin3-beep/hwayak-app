@@ -29,7 +29,8 @@
   --zebra:rgba(255,255,255,.017);
 }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0;max-width:100%;overflow-x:hidden}
+html,body{margin:0;padding:0;max-width:100%;overflow-x:hidden;overflow-x:clip}
+/* clip 은 가로 넘침만 자르고 스크롤 컨테이너를 만들지 않아 상단바·회차바 sticky 가 유지된다 (구형 브라우저는 hidden) */
 body{
   background:var(--bg); color:var(--fg);
   font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif;
@@ -866,3 +867,15 @@ body.reading-cards .theory-card-kicker{margin-bottom:14px}
 .srch-more{display:block;width:100%;margin:4px 0 8px;min-height:40px}
 .srch-flash{animation:srchFlash 2.4s ease}
 @keyframes srchFlash{0%,45%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:0 0 0 0 transparent}}
+
+/* ── 작업형 회차 바로가기(상단 고정) ── */
+.worknav{position:sticky; top:0; z-index:40; display:flex; gap:6px; overflow-x:auto;
+  margin:-4px 0 12px; padding:8px 0; background:var(--bg); scrollbar-width:none;
+  -webkit-overflow-scrolling:touch}
+.worknav::-webkit-scrollbar{display:none}
+.worknav a{flex:none; display:flex; flex-direction:column; gap:1px; padding:6px 11px;
+  border:1px solid var(--line); border-radius:9px; background:var(--panel);
+  color:var(--fg); font-size:12px; line-height:1.35; white-space:nowrap; text-decoration:none}
+.worknav a b{font-size:12.5px; font-weight:650}
+.worknav a.active{background:var(--accent); border-color:var(--accent); color:var(--onaccent)}
+.worknav a:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
